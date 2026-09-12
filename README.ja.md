@@ -152,6 +152,18 @@ rules:
 
 残るルールも役には立ちます。文の長さ、コンマの数、不可視文字、3 つの文書バリデータです。ただしプロジェクトの主眼ではなく、fixture も用意していません。
 
+### textlint 側のツールと組み合わせる
+
+`--format textlint` は `loc` や `fix` まで含めた本物の textlint 結果を出します。textlint の formatter がそのまま読めるので、CI 向けの出力を issen 側で用意する必要がありません。
+
+```bash
+issen --format textlint docs/*.md > result.json
+npx @textlint/linter-formatter --formatter github result.json   # GitHub の注釈
+npx @textlint/linter-formatter --formatter checkstyle result.json
+```
+
+一方、textlint の *plugin* は使えません。plugin とは textlint に新しいファイル形式を教える processor です。`textlint-plugin-latex` や `textlint-plugin-review` が該当します。issen が読むのは Markdown だけです。npm で公開されたルールも同様に読み込めません。どちらかが必要なときは、同じファイルに textlint をかけ、速いループには issen を使ってください。
+
 ## textlint との既知の差
 
 - `no-dropping-the-ra` の `来れる`・`見れる` では、textlint の列が 1 文字ずれる。1 始まりの位置をそのまま index に使っているため。issen は実際の位置を返す

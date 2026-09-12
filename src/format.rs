@@ -44,6 +44,21 @@ struct TextlintFile<'a> {
 }
 
 #[derive(Serialize)]
+struct Position {
+    line: usize,
+    column: usize,
+}
+
+/// textlint carries the span twice: `line`/`column` for the start, and `loc`
+/// for both ends. Formatters use whichever they were written against, so a
+/// result missing `loc` breaks the github and junit formatters.
+#[derive(Serialize)]
+struct Loc {
+    start: Position,
+    end: Position,
+}
+
+#[derive(Serialize)]
 struct TextlintMessage<'a> {
     #[serde(rename = "type")]
     kind: &'static str,
@@ -54,6 +69,7 @@ struct TextlintMessage<'a> {
     column: usize,
     index: usize,
     range: [usize; 2],
+    loc: Loc,
     severity: u8,
     #[serde(skip_serializing_if = "Option::is_none")]
     fix: Option<&'a Fix>,
@@ -86,6 +102,10 @@ pub fn render(format: Format, results: &[FileResult], summary: Summary) -> Strin
                             column: d.column,
                             index: d.range[0],
                             range: d.range,
+                            loc: Loc {
+                                start: Position { line: d.line, column: d.column },
+                                end: Position { line: d.end_line, column: d.end_column },
+                            },
                             severity: if d.severity == Severity::Error { 2 } else { 1 },
                             fix: d.fix.as_ref(),
                         })

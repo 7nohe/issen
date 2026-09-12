@@ -137,3 +137,24 @@ mod utf16 {
         assert!(!has("漢字漢字と言う。\n", "max-kanji-continuous-len"));
     }
 }
+
+#[test]
+fn textlint_format_carries_every_field_its_formatters_read() {
+    use issen::format::{render, Format, Summary};
+
+    let linter = Linter::preset().unwrap();
+    let results = vec![linter.lint("t.md", "# T\n\nﾃｽﾄです。\n")];
+    let out = render(Format::Textlint, &results, Summary::of(&results, 0));
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    let m = &v[0]["messages"][0];
+
+    assert_eq!(m["type"], "lint");
+    assert_eq!(m["ruleId"], "ja-technical-writing/no-hankaku-kana");
+    assert_eq!(m["severity"], 2);
+    assert_eq!(m["index"], m["range"][0]);
+    // `loc` duplicates the span; the github and junit formatters read only it.
+    assert_eq!(m["loc"]["start"]["line"], m["line"]);
+    assert_eq!(m["loc"]["start"]["column"], m["column"]);
+    assert_eq!(m["loc"]["end"], serde_json::json!({ "line": 3, "column": 4 }));
+    assert!(m["fix"]["text"].is_string());
+}

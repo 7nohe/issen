@@ -150,6 +150,18 @@ rules:
 
 What is left still earns its keep: sentence length, comma count, invisible characters, and the three document validators. This is not the project's focus, though, and no fixtures cover it.
 
+### Using it with textlint's own tooling
+
+`--format textlint` emits a real textlint result, `loc` and `fix` included, so textlint's formatters read it. That covers CI annotations without issen having to grow its own:
+
+```bash
+issen --format textlint docs/*.md > result.json
+npx @textlint/linter-formatter --formatter github result.json   # GitHub annotations
+npx @textlint/linter-formatter --formatter checkstyle result.json
+```
+
+What issen cannot use is a textlint *plugin*. Plugins are the processors that teach textlint new file formats, such as `textlint-plugin-latex` or `textlint-plugin-review`; issen reads Markdown and nothing else. Rules published as npm packages are equally out of reach. When you need either, run textlint over the same files and keep issen for the fast loop.
+
 ## Known differences from textlint
 
 - `no-dropping-the-ra` on 来れる / 見れる: textlint reports a column one off (it passes a 1-based position straight through as an index). issen reports the real position.
