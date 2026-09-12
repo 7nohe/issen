@@ -56,7 +56,7 @@ impl Rule for Forbidden {
     fn default_enabled(&self) -> bool {
         false
     }
-    fn validate(&self, options: &serde_yaml::Value) -> Result<(), String> {
+    fn validate(&self, options: &yaml_serde::Value) -> Result<(), String> {
         matchers(options, "patterns").map(|_| ())
     }
     fn check(&mut self, blk: &BlockData, ctx: &Ctx) -> Vec<Report> {
@@ -90,7 +90,7 @@ impl Rule for Terminology {
     fn default_enabled(&self) -> bool {
         false
     }
-    fn validate(&self, options: &serde_yaml::Value) -> Result<(), String> {
+    fn validate(&self, options: &yaml_serde::Value) -> Result<(), String> {
         for term in options.get("terms").and_then(|t| t.as_sequence()).map(|s| s.as_slice()).unwrap_or_default() {
             if term.get("preferred").and_then(|p| p.as_str()).is_none() {
                 return Err("terminology.terms: every entry needs a `preferred` string".to_string());

@@ -32,10 +32,10 @@ lindera = { version = "=6.0.0", features = ["embed-ipadic"], optional = true }
 pulldown-cmark = "0.13"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# Published as 0.9.34+deprecated and no longer maintained upstream. Kept on
-# purpose: the successor forks have not settled on one, and the surface used
-# here is a YAML mapping parse. Revisit when a clear successor emerges.
-serde_yaml = "=0.9.34"
+# The YAML Organization's continuation of serde_yaml, which its own author
+# retired in 2024. Picked over the other forks for being the one with
+# institutional stewardship and current releases.
+yaml_serde = "0.10"
 clap = { version = "4", features = ["derive"] }
 unicode-normalization = "0.1"
 regex = "1"

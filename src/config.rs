@@ -14,8 +14,8 @@
 
 use regex::Regex;
 use serde::Deserialize;
-use serde_yaml::Value;
 use std::collections::BTreeMap;
+use yaml_serde::Value;
 
 const PRESET: &str = r#"
 rules:
@@ -136,7 +136,7 @@ pub struct Config {
 
 impl Config {
     pub fn preset() -> Config {
-        serde_yaml::from_str(PRESET).expect("preset config is valid")
+        yaml_serde::from_str(PRESET).expect("preset config is valid")
     }
 
     pub fn load(path: &str) -> Result<Config, String> {
@@ -146,7 +146,7 @@ impl Config {
 
     /// Parse user YAML and layer it over the preset.
     pub fn parse(yaml: &str) -> Result<Config, String> {
-        let user: Config = serde_yaml::from_str(yaml).map_err(|e| e.to_string())?;
+        let user: Config = yaml_serde::from_str(yaml).map_err(|e| e.to_string())?;
         let mut base = Config::preset();
         for (k, v) in user.rules {
             let merged = match (base.rules.remove(&k), v) {

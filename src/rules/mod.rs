@@ -16,7 +16,7 @@ use crate::config::Config;
 use crate::document::{Block, BlockKind, Document};
 use crate::sentence::Sentence;
 use crate::tokenizer::Token;
-use serde_yaml::Value;
+use yaml_serde::Value;
 
 /// A finding, in byte offsets of the block text (or of the source, for
 /// `Anchor::Source` reports).

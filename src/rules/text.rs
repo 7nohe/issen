@@ -32,7 +32,7 @@ impl Rule for SentenceLength {
     fn scope(&self) -> Scope {
         Scope::PROSE
     }
-    fn validate(&self, options: &serde_yaml::Value) -> Result<(), String> {
+    fn validate(&self, options: &yaml_serde::Value) -> Result<(), String> {
         matchers(options, "skipPatterns").map(|_| ())?;
         match opt_str(options, "countBy", "codeunits").as_str() {
             "codeunits" | "codepoints" => Ok(()),
