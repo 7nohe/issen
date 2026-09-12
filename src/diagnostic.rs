@@ -17,7 +17,7 @@ impl Severity {
     }
 }
 
-/// A replacement over a character range of the source document.
+/// A replacement over a UTF-16 offset range of the source document.
 #[derive(Debug, Clone, Serialize)]
 pub struct Fix {
     pub range: [usize; 2],
@@ -34,7 +34,8 @@ pub struct Diagnostic {
     pub column: usize,
     pub end_line: usize,
     pub end_column: usize,
-    /// Character offsets `[start, end)` from the start of the document.
+    /// UTF-16 code unit offsets `[start, end)` from the start of the
+    /// document. textlint reports the same unit, and so does LSP by default.
     pub range: [usize; 2],
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fix: Option<Fix>,

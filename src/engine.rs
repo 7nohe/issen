@@ -95,31 +95,39 @@ impl Linter {
     }
 }
 
-/// Apply the fixes carried by `diagnostics` to `source`. Fixes are character
-/// ranges; overlapping ones are applied first-come and the rest skipped, so
-/// the caller re-lints to pick them up on the next round.
+/// Apply the fixes carried by `diagnostics` to `source`. Fix ranges are
+/// UTF-16 offsets, the same unit the diagnostics report; overlapping ones are
+/// applied first-come and the rest skipped, so the caller re-lints to pick
+/// them up on the next round.
 pub fn apply_fixes(source: &str, diagnostics: &[Diagnostic]) -> (String, usize) {
     let mut fixes: Vec<&Fix> = diagnostics.iter().filter_map(|d| d.fix.as_ref()).collect();
     if fixes.is_empty() {
         return (source.to_string(), 0);
     }
     fixes.sort_by_key(|f| (f.range[0], f.range[1]));
-    let char_to_byte: Vec<usize> = source.char_indices().map(|(b, _)| b).chain(std::iter::once(source.len())).collect();
+
+    // UTF-16 offset -> byte offset. Both halves of a surrogate pair map to the
+    // start of their character, so a range can never split one.
+    let mut to_byte: Vec<usize> = Vec::with_capacity(source.len() + 1);
+    for (b, ch) in source.char_indices() {
+        to_byte.extend(std::iter::repeat_n(b, ch.len_utf16()));
+    }
+    to_byte.push(source.len());
 
     let mut out = String::with_capacity(source.len());
-    let mut cursor = 0usize; // in chars
+    let mut cursor = 0usize; // in UTF-16 offsets
     let mut applied = 0usize;
     for f in fixes {
         let [start, end] = f.range;
-        if start < cursor || end < start || end >= char_to_byte.len() {
+        if start < cursor || end < start || end >= to_byte.len() {
             continue;
         }
-        out.push_str(&source[char_to_byte[cursor]..char_to_byte[start]]);
+        out.push_str(&source[to_byte[cursor]..to_byte[start]]);
         out.push_str(&f.text);
         cursor = end;
         applied += 1;
     }
-    out.push_str(&source[char_to_byte[cursor]..]);
+    out.push_str(&source[to_byte[cursor]..]);
     (out, applied)
 }
 
@@ -135,7 +143,7 @@ fn to_diagnostic(doc: &Document, anchor: Anchor, rule: &str, severity: Severity,
     let fix = r.fix.map(|f| {
         let fs = to_src(f.start);
         let fe = to_src(f.end).max(fs);
-        Fix { range: [doc.char_offset(fs), doc.char_offset(fe)], text: f.text }
+        Fix { range: [doc.utf16_offset(fs), doc.utf16_offset(fe)], text: f.text }
     });
     Diagnostic {
         rule: rule.to_string(),
@@ -145,7 +153,7 @@ fn to_diagnostic(doc: &Document, anchor: Anchor, rule: &str, severity: Severity,
         column,
         end_line,
         end_column,
-        range: [doc.char_offset(start), doc.char_offset(end)],
+        range: [doc.utf16_offset(start), doc.utf16_offset(end)],
         fix,
     }
 }

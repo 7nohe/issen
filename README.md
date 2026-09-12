@@ -59,7 +59,7 @@ A diagnostic looks like this. For the document `# T\n\nﾃｽﾄです。\n`:
 }
 ```
 
-`range` is a pair of character offsets from the start of the document. An agent can splice a replacement in without re-parsing. Rule IDs are stable and match textlint's.
+`range` is a pair of UTF-16 code unit offsets from the start of the document, so an agent can splice a replacement in without re-parsing. That is the unit textlint reports and the one LSP uses by default; it equals the character count until the document holds an emoji or a rare kanji outside the BMP. `sentence-length` measures in the same unit, and `countBy: codepoints` switches both it and textlint to characters. Rule IDs are stable and match textlint's.
 
 ## Configuration
 
@@ -155,6 +155,7 @@ What is left still earns its keep: sentence length, comma count, invisible chara
 - `no-dropping-the-ra` on 来れる / 見れる: textlint reports a column one off (it passes a 1-based position straight through as an index). issen reports the real position.
 - `sentence-length`: textlint reports a paragraph-relative column. issen reports the start of the sentence.
 - Text inside links and emphasis is checked by more rules here than in textlint.
+- `range` spans the whole match here. textlint reports a single code unit for the rules that hand it only an index, among them `max-kanji-continuous-len`, `no-dropping-the-ra`, and `no-double-negative-ja`. The line and column agree either way.
 
 ## Morphology backend
 

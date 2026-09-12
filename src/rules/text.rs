@@ -7,6 +7,12 @@ use regex::Regex;
 use std::sync::OnceLock;
 use unicode_normalization::UnicodeNormalization;
 
+/// Length in UTF-16 code units, the unit textlint measures in because its
+/// rules run on JavaScript strings.
+pub fn utf16_len(s: &str) -> usize {
+    s.chars().map(char::len_utf16).sum()
+}
+
 /// Han characters as textlint's kanji rules define them.
 pub fn is_kanji(c: char) -> bool {
     matches!(c, '々' | '〇' | '〻' | '\u{3400}'..='\u{9FFF}' | '\u{F900}'..='\u{FAFF}' | '\u{20000}'..='\u{2FFFF}')
@@ -16,10 +22,11 @@ fn is_japanese(text: &str) -> bool {
     text.chars().any(|c| is_kanji(c) || matches!(c, 'ぁ'..='ん' | 'ァ'..='ヶ'))
 }
 
-/// sentence-length: at most `max` characters per sentence. Like textlint, a
-/// link whose text is its own URL is not counted (`skipUrlStringLink`), a
-/// paragraph that is only a link is skipped, and `skipPatterns` are removed
-/// before counting.
+/// sentence-length: at most `max` per sentence, counted in UTF-16 code units
+/// (`countBy: codepoints` counts characters instead). Like textlint, a link
+/// whose text is its own URL is not counted (`skipUrlStringLink`), a paragraph
+/// that is only a link is skipped, and `skipPatterns` are removed before
+/// counting.
 #[derive(Default)]
 pub struct SentenceLength {
     skip_patterns: Option<Vec<Regex>>,
@@ -50,7 +57,11 @@ impl Rule for SentenceLength {
             for re in skip_patterns.iter() {
                 text = re.replace_all(&text, "").into_owned();
             }
-            let len = text.chars().count();
+            let len = if opt_str(&ctx.options, "countBy", "codeunits") == "codepoints" {
+                text.chars().count()
+            } else {
+                utf16_len(&text)
+            };
             if len > max {
                 let line = ctx.line_of(blk, s.byte_range.start);
                 out.push(Report::at(
@@ -102,7 +113,7 @@ impl Rule for MaxKanjiContinuousLen {
                 (true, None) => run_start = Some(i),
                 (false, Some(start)) => {
                     let run = &text[start..i];
-                    if run.chars().count() > max && !allow.iter().any(|a| a == run) && !blk.in_link_or_emphasis(start) {
+                    if utf16_len(run) > max && !allow.iter().any(|a| a == run) && !blk.in_link_or_emphasis(start) {
                         out.push(Report::at(start, i, format!("漢字が{}つ以上連続しています: {run}", max + 1)));
                     }
                     run_start = None;

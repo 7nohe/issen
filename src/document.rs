@@ -141,23 +141,23 @@ pub struct Document {
     pub source: String,
     pub blocks: Vec<Block>,
     line_starts: Vec<usize>,
-    /// Character offset of every byte offset (len = source.len() + 1).
-    byte_to_char: Vec<u32>,
+    /// UTF-16 offset of every byte offset (len = source.len() + 1).
+    byte_to_utf16: Vec<u32>,
 }
 
 impl Document {
     pub fn parse(source: &str) -> Document {
         let mut line_starts = vec![0];
-        let mut byte_to_char = vec![0u32; source.len() + 1];
-        let mut chars = 0u32;
+        let mut byte_to_utf16 = vec![0u32; source.len() + 1];
+        let mut units = 0u32;
         for (i, ch) in source.char_indices() {
-            byte_to_char[i..i + ch.len_utf8()].fill(chars);
-            chars += 1;
+            byte_to_utf16[i..i + ch.len_utf8()].fill(units);
+            units += ch.len_utf16() as u32;
             if ch == '\n' {
                 line_starts.push(i + 1);
             }
         }
-        byte_to_char[source.len()] = chars;
+        byte_to_utf16[source.len()] = units;
 
         let mut opts = Options::empty();
         opts.insert(Options::ENABLE_TABLES);
@@ -266,20 +266,23 @@ impl Document {
         }
         close(&mut open, &mut blocks);
 
-        Document { source: source.to_string(), blocks, line_starts, byte_to_char }
+        Document { source: source.to_string(), blocks, line_starts, byte_to_utf16 }
     }
 
-    /// 1-based line and column (column counted in characters) of a source byte offset.
+    /// 1-based line and column of a source byte offset. The column counts
+    /// UTF-16 code units, which is what textlint reports and what LSP uses by
+    /// default; it equals the character count unless the line holds something
+    /// outside the BMP.
     pub fn position(&self, src_byte: usize) -> (usize, usize) {
         let src_byte = src_byte.min(self.source.len());
         let line = self.line_starts.partition_point(|&s| s <= src_byte).saturating_sub(1);
-        let column = self.char_offset(src_byte) - self.char_offset(self.line_starts[line]) + 1;
+        let column = self.utf16_offset(src_byte) - self.utf16_offset(self.line_starts[line]) + 1;
         (line + 1, column)
     }
 
-    /// Character offset from the start of the source.
-    pub fn char_offset(&self, src_byte: usize) -> usize {
-        self.byte_to_char[src_byte.min(self.source.len())] as usize
+    /// UTF-16 code unit offset from the start of the source.
+    pub fn utf16_offset(&self, src_byte: usize) -> usize {
+        self.byte_to_utf16[src_byte.min(self.source.len())] as usize
     }
 }
 

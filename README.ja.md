@@ -59,7 +59,9 @@ issen --list-rules
 }
 ```
 
-`range` は文書先頭からの文字オフセットの組です。エージェントは構文解析をやり直さずに、その範囲を差し替えられます。rule ID は textlint と同じ名前で固定です。
+`range` は文書先頭からの UTF-16 コードユニットの組です。エージェントは構文解析をやり直さずに、その範囲を差し替えられます。
+
+この単位は textlint の報告と同じで、LSP の既定でもあります。絵文字や BMP 外の漢字が入るまでは文字数と一致します。`sentence-length` も同じ単位で測ります。`countBy: codepoints` を指定すると、textlint と同様に文字数へ切り替わります。rule ID は textlint と同じ名前で固定です。
 
 ## 設定
 
@@ -155,6 +157,7 @@ rules:
 - `no-dropping-the-ra` の `来れる`・`見れる` では、textlint の列が 1 文字ずれる。1 始まりの位置をそのまま index に使っているため。issen は実際の位置を返す
 - `sentence-length` の列は、textlint が段落を基準にした値を返す。issen は文の先頭を返す
 - リンクと強調の中のテキストは、textlint より多くのルールが検査の対象にしている
+- `range` は一致した範囲全体を指す。textlint は位置だけを渡すルールで 1 コードユニットを返す。`max-kanji-continuous-len`、`no-dropping-the-ra`、`no-double-negative-ja` などが該当する。行と列はどちらも一致する
 
 ## 形態素解析バックエンド
 

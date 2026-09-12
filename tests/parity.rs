@@ -92,3 +92,48 @@ fn conjunction_after_whitespace_is_ignored() {
     assert!(!has("速いので `Cargo.toml` で固定する。上げるときは `cargo test` で確認する。\n", "no-doubled-conjunction"));
     assert!(has("しかし、遅い。しかし、安い。\n", "no-doubled-conjunction"));
 }
+
+/// textlint runs on JavaScript strings, so every position and length it
+/// reports is in UTF-16 code units. issen matches that, which only shows up
+/// once a document holds something outside the BMP.
+mod utf16 {
+    use super::*;
+
+    const EMOJI: &str = "😀"; // one character, two UTF-16 code units
+
+    #[test]
+    fn offsets_and_columns_count_utf16() {
+        let src = format!("# T\n\n{EMOJI} ﾃｽﾄです。\n");
+        let linter = Linter::preset().unwrap();
+        let d = linter.lint("t.md", &src).diagnostics.into_iter().find(|d| d.rule == "no-hankaku-kana").unwrap();
+        // The emoji plus a space is 3 code units, so the kana starts at column 4.
+        assert_eq!((d.line, d.column), (3, 4));
+        assert_eq!(d.range, [8, 11]);
+        assert_eq!(d.fix.unwrap().range, [8, 11]);
+    }
+
+    #[test]
+    fn fixes_apply_across_a_surrogate_pair() {
+        let linter = Linter::preset().unwrap();
+        let fixed = linter.fix("t.md", &format!("{EMOJI} ﾃｽﾄです。\n"));
+        assert_eq!(fixed.source, format!("{EMOJI} テストです。\n"));
+        assert_eq!(fixed.applied, 1);
+    }
+
+    #[test]
+    fn sentence_length_counts_utf16_by_default() {
+        // 90 characters, 150 UTF-16 code units: over the limit only in textlint's unit.
+        let src = format!("{}{}。\n", EMOJI.repeat(60), "あ".repeat(29));
+        assert!(has(&src, "sentence-length"));
+
+        let linter = Linter::new(Config::parse("rules:\n  sentence-length: { countBy: codepoints }\n").unwrap()).unwrap();
+        assert!(linter.lint("t.md", &src).diagnostics.iter().all(|d| d.rule != "sentence-length"));
+    }
+
+    #[test]
+    fn kanji_runs_count_utf16() {
+        // Four SIP kanji: 4 characters, 8 UTF-16 code units, so over the limit of 6.
+        assert!(has("𠮟𠮟𠮟𠮟と言う。\n", "max-kanji-continuous-len"));
+        assert!(!has("漢字漢字と言う。\n", "max-kanji-continuous-len"));
+    }
+}
