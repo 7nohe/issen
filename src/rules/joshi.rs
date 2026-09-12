@@ -163,7 +163,7 @@ impl Rule for NoDoubledJoshi {
                         || (first.pd1 == "格助詞" && first.surface == "を")
                         || (first.pd1 == "接続助詞" && first.surface == "て")
                         || (pair && first.pd1 == "並立助詞" && second.pd1 == "並立助詞")
-                        // 〜かどうか
+                        // The 〜かどうか construction, where the repeat is idiomatic.
                         || (pair && first.surface == "か" && second.surface == "か" && prev_of(second) == Some("どう")));
                 if exception {
                     continue;

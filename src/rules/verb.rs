@@ -90,7 +90,8 @@ fn joshi(s: &'static [&'static str]) -> Expect {
     Expect { surface: s, pos: &["助詞"], ..EMPTY }
 }
 
-/// no-dropping-the-ra: 一段動詞の未然形 + 接尾「れる」 (食べれる), plus 来れる/見れる.
+/// no-dropping-the-ra: an 一段 verb in 未然形 followed by the suffix れる, as in
+/// 食べれる, plus the fixed forms 来れる and 見れる.
 fn ra_patterns() -> &'static [Pattern] {
     static P: OnceLock<Vec<Pattern>> = OnceLock::new();
     P.get_or_init(|| {
