@@ -10,6 +10,12 @@ Issen (一閃) is a single flash of the blade: one pass, and what the document s
 - Rules are ported from `textlint-rule-preset-ja-technical-writing`. Fixtures check that issen reports the same rule ID, line, and column as textlint does.
 - Output for people (text), for agents (JSON with character offsets and fixes), and for comparison (textlint-compatible JSON).
 
+## What this is, and is not
+
+textlint is a pluggable linter for natural language in general. Nothing about the platform is Japanese; the rules arrive as npm packages you choose, and there are presets for English prose as readily as for Japanese. issen is not a port of that platform. It reimplements the rules of one preset, `textlint-rule-preset-ja-technical-writing`, and emits textlint's JSON so the two can be diffed against each other.
+
+So there is no plugin system here, and a textlint rule from npm will not load. If you want English prose rules, or a rule someone published last week, run textlint. issen is for the case where an agent loop wants one binary, a start-up in milliseconds, and the same answer every run. On a 114 KB document it takes about 0.01 s against textlint's 4.3 s on the same machine, with 17 of the preset's rules implemented.
+
 ## Install
 
 ```bash
