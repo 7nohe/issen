@@ -1,103 +1,170 @@
 # issen
 
-AI Agent が生成した日本語 Markdown を、高速かつ決定論的に検証するための document harness。名は「一閃」。刃が一度きらめけば、文書に不要なものは落ちている。
+日本語版: [README.ja.md](README.ja.md)
 
-- 形態素解析は [Lindera](https://github.com/lindera/lindera) + IPA 辞書（単一バイナリ、外部プロセスなし）
-- ルールは `textlint-rule-preset-ja-technical-writing` を仕様として移植。同じ入力に対して同じ rule ID・行・列を返すことを fixture で検証している
-- 出力は人向けテキスト、Agent 向け JSON、比較用 textlint 互換 JSON
+A fast, deterministic Markdown linter for Japanese prose — built as a harness for documents written by AI agents.
 
-## 使い方
+Issen (一閃) is a single flash of the blade: one pass, and what the document should not carry is gone.
+
+- Morphological analysis by [Lindera](https://github.com/lindera/lindera) with the embedded IPADIC dictionary. One binary, no external process, no network.
+- Rules are ported from `textlint-rule-preset-ja-technical-writing`. Fixtures check that issen reports the same rule ID, line, and column as textlint does.
+- Output for people (text), for agents (JSON with character offsets and fixes), and for comparison (textlint-compatible JSON).
+
+## Install
+
+```bash
+cargo install --path .
+```
+
+The IPADIC dictionary is compiled into the binary, so the result is around 50 MB and needs nothing else at run time.
+
+## Usage
 
 ```bash
 issen README.md
 cat generated.md | issen --stdin --format json
-issen docs/*.md --format textlint   # textlint と diff するとき
-issen --fix docs/*.md               # 直せるものは直し、残りを報告
-cat generated.md | issen --stdin --fix > fixed.md   # 修正後の文書は stdout、報告は stderr
+issen docs/*.md --format textlint   # to diff against textlint
+issen --fix docs/*.md               # fix what can be fixed, report the rest
+cat generated.md | issen --stdin --fix > fixed.md   # document to stdout, report to stderr
 issen --list-rules
 ```
 
-`--fix` は修正を適用したあと再 lint し、修正がなくなるまで（最大 10 周）繰り返す。終了コードは `gate` 設定に従い、既定では error が 1 件以上なら 1。
+`--fix` applies every available fix, re-lints, and repeats until nothing is left to fix (at most 10 rounds). The exit code follows the `gate` setting; by default any error exits 1.
 
-### Agent から使うとき
+### Driving it from an agent
 
 ```text
-文書を生成 → issen --stdin --fix --format json → 残った診断を読んで書き直す → 再実行 → exit 0
+generate document → issen --stdin --fix --format json → read what remains → rewrite → run again → exit 0
 ```
 
-JSON の `range` は文書先頭からの文字オフセットなので、Agent はそのまま該当箇所を差し替えられる。rule ID は textlint と同じ名前で固定。
+A diagnostic looks like this. For the document `# T\n\nﾃｽﾄです。\n`:
 
-JSON 出力の各診断は `rule` / `severity` / `message` / `line` / `column` / `endLine` / `endColumn` / `range`（文書先頭からの文字オフセット）と、ある場合は `fix`（`range` と置換文字列）を持つ。
+```json
+{
+  "rule": "no-hankaku-kana",
+  "severity": "error",
+  "message": "Disallow to use 半角カタカナ: \"ﾃｽﾄ\"",
+  "line": 3,
+  "column": 1,
+  "endLine": 3,
+  "endColumn": 4,
+  "range": [5, 8],
+  "fix": { "range": [5, 8], "text": "テスト" }
+}
+```
 
-## 設定
+`range` is a pair of character offsets from the start of the document. An agent can splice a replacement in without re-parsing. Rule IDs are stable and match textlint's.
 
-`./issen.yml` があれば自動で読む。書かなかったルールは preset の既定値のまま。
+## Configuration
+
+`./issen.yml` is read automatically. Options are merged key by key over the preset, so naming a rule to change its severity keeps its thresholds.
 
 ```yaml
 rules:
   sentence-length: { max: 90 }
-  no-exclamation-question-mark: false        # 無効化
-  ja-no-weak-phrase: { severity: warning }   # 既定は error
+  no-exclamation-question-mark: false        # disable
+  ja-no-weak-phrase: { severity: warning }   # error by default
   no-doubled-joshi: { min_interval: 1, allow: ["も"] }
   no-mix-dearu-desumasu:
     preferInBody: ですます
     preferInList: である
 
-  # 文書バリデータ。書いたときだけ有効。
-  required-headings: { headings: [概要, 前提条件] }
-  forbidden: { patterns: ["絶対に成功します", "/必ず.*します/"] }   # /…/ は正規表現
+  # Document validators, inactive until configured.
+  required-headings: { headings: [Overview, Requirements] }
+  forbidden: { patterns: ["never fails", "/guaranteed .*/"] }   # /…/ is a regex
   terminology:
     terms:
-      - { preferred: GitHub, avoid: [Github, github] }               # --fix で置換
+      - { preferred: GitHub, avoid: [Github, github] }          # replaced by --fix
 
 gate:
-  fail-on: error      # error（既定）| warning | never
-  max-warnings: 3     # 超えたら exit 1。--max-warnings で上書き可
+  fail-on: error      # error (default) | warning | never
+  max-warnings: 3     # exit 1 above this; --max-warnings overrides
 ```
 
-## ルール
+## Rules
 
-| rule | 概要 | NLP |
-| --- | --- | --- |
-| sentence-length | 1 文 100 文字以下 | |
-| max-comma | 1 文にコンマ 3 つまで | |
-| max-ten | 1 文に読点 3 つまで（名詞に挟まれた読点は数えない） | 要 |
-| max-kanji-continuous-len | 漢字の連続 6 文字まで | |
-| no-mix-dearu-desumasu | 見出し・本文・箇条書きごとに文体を統一 | 要 |
-| ja-no-mixed-period | 段落末は「。」 | |
-| no-double-negative-ja | 二重否定 | 要 |
-| no-dropping-the-ra | ら抜き言葉 | 要 |
-| no-doubled-conjunctive-particle-ga | 逆接の「が」の重複 | 要 |
-| no-doubled-conjunction | 同じ接続詞の連続 | 要 |
-| no-doubled-joshi | 同じ助詞の連続 | 要 |
-| no-nfd | UTF8-MAC 濁点 | |
-| no-invalid-control-character | 制御文字 | |
-| no-zero-width-spaces | ゼロ幅スペース | |
-| no-exclamation-question-mark | 感嘆符・疑問符 | |
-| no-hankaku-kana | 半角カナ | |
-| ja-no-weak-phrase | 弱い表現（かも、思う、思います、可能性を示唆している） | 要 |
+Twelve rules read Japanese morphology or script and only apply to Japanese text. The rest work on any language.
 
-文書バリデータ（設定したときだけ動く）: required-headings、forbidden、terminology。
+| rule | what it checks | Japanese-specific | needs morphology |
+| --- | --- | --- | --- |
+| sentence-length | at most 100 characters per sentence | | |
+| max-comma | at most 3 commas per sentence | | |
+| no-invalid-control-character | control characters | | |
+| no-zero-width-spaces | zero-width spaces | | |
+| no-exclamation-question-mark | `!` and `?`, both widths | | |
+| required-headings | headings the document must carry | | |
+| forbidden | phrases the document must not carry | | |
+| terminology | one spelling per term | | |
+| max-ten | at most 3 読点 per sentence (not counting one between two nouns) | yes | yes |
+| max-kanji-continuous-len | at most 6 kanji in a row | yes | |
+| no-mix-dearu-desumasu | one style per heading, body, and list | yes | yes |
+| ja-no-mixed-period | paragraphs end with 。 | yes | |
+| no-double-negative-ja | double negatives | yes | yes |
+| no-dropping-the-ra | ら抜き言葉 | yes | yes |
+| no-doubled-conjunctive-particle-ga | 逆接の「が」 used twice | yes | yes |
+| no-doubled-conjunction | the same conjunction twice in a row | yes | yes |
+| no-doubled-joshi | the same particle twice in a row | yes | yes |
+| no-nfd | UTF8-MAC combining 濁点 | yes | |
+| no-hankaku-kana | half-width katakana | yes | |
+| ja-no-weak-phrase | hedging (かも, 思う, 思います, 可能性を示唆している) | yes | yes |
 
-未移植: ja-no-redundant-expression, ja-no-abusage, ja-no-successive-word, ja-unnatural-alphabet, no-unmatched-pair, arabic-kanji-numbers。
+The document validators (`required-headings`, `forbidden`, `terminology`) do nothing until the config names them.
 
-## textlint との既知の差
+Messages for the ported rules are reproduced from textlint, so the Japanese rules speak Japanese.
 
-- `no-dropping-the-ra` の 来れる/見れる は、textlint が 1 文字ずれた列を返す（1 始まりの位置をそのまま index に使っている）。issen は実際の位置を返す。
-- `sentence-length` の列は、textlint が段落ノード基準の値を返す。issen は文の先頭を返す。
-- Link / Emphasis 内のテキストも検査対象にしている（textlint の多くのルールは除外する）。
+Not ported yet:
 
-## 形態素解析バックエンド
+- `ja-no-redundant-expression`
+- `ja-no-abusage`
+- `ja-no-successive-word`
+- `ja-unnatural-alphabet`
+- `no-unmatched-pair`
+- `arabic-kanji-numbers`
 
-ルールが見るのは IPADIC（MeCab）形式の 9 素性だけで、解析器そのものには依存しない。既定のバックエンドは Lindera + 同梱 IPADIC で、`src/tokenizer.rs` の `Morphology` trait の実装として閉じ込めてある。別の解析器（Vibrato、MeCab バインディングなど）を足すときは、同 trait を実装して `backend-*` feature を追加する。
+### Non-Japanese documents
 
-Lindera はメジャーバージョンの更新が速いので `Cargo.toml` で完全に固定している。上げるときは `cargo test` で `tests/compat.rs`（textlint 実出力との一致）を通してから。
+The engine itself is not tied to Japanese, but the defaults are. Twelve rules read Japanese morphology or script, and `sentence-length`'s limit of 100 follows a Japanese writing convention that no English sentence would respect. Turn the Japanese rules off and raise the limit:
 
-## 開発
+```yaml
+rules:
+  max-ten: false
+  max-kanji-continuous-len: false
+  no-mix-dearu-desumasu: false
+  ja-no-mixed-period: false
+  no-double-negative-ja: false
+  no-dropping-the-ra: false
+  no-doubled-conjunctive-particle-ga: false
+  no-doubled-conjunction: false
+  no-doubled-joshi: false
+  no-nfd: false
+  no-hankaku-kana: false
+  ja-no-weak-phrase: false
+  sentence-length: { max: 200 }
+```
+
+What is left still earns its keep: sentence length, comma count, invisible characters, and the three document validators. This is not the project's focus, though, and no fixtures cover it.
+
+## Known differences from textlint
+
+- `no-dropping-the-ra` on 来れる / 見れる: textlint reports a column one off (it passes a 1-based position straight through as an index). issen reports the real position.
+- `sentence-length`: textlint reports a paragraph-relative column. issen reports the start of the sentence.
+- Text inside links and emphasis is checked by more rules here than in textlint.
+
+## Morphology backend
+
+Rules only read the nine IPADIC (MeCab) feature columns, never the analyzer itself. The default backend is Lindera with the bundled IPADIC, kept behind the `Morphology` trait in `src/tokenizer.rs`. Adding another analyzer (Vibrato, a MeCab binding) means implementing that trait and adding a `backend-*` feature.
+
+Lindera moves through major versions quickly, so `Cargo.toml` pins it exactly. Raise the pin only after `cargo test` passes, `tests/compat.rs` included — that suite compares against textlint's real output.
+
+## Development
 
 ```bash
 cargo build --release
 cargo test
 ```
 
-`tests/fixtures/*.md` と対になる `*.textlint.json` は textlint v15 + preset の実出力で、`tests/compat.rs` が rule ID・行で全件一致することを確認する。
+`tests/fixtures/*.md` are paired with `*.textlint.json`, the real output of textlint v15 with the preset. `tests/compat.rs` requires an exact match on rule ID, line, and column, with the two divergences above listed individually.
+
+## License
+
+MIT
