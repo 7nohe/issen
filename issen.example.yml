@@ -1,0 +1,21 @@
+# Copy to issen.yml. Anything omitted keeps the ja-technical-writing preset default.
+rules:
+  sentence-length: { max: 100 }
+  max-ten: { max: 3 }
+  no-exclamation-question-mark: true
+  ja-no-weak-phrase: { severity: warning }
+  no-mix-dearu-desumasu:
+    preferInHeader: ""
+    preferInBody: ですます
+    preferInList: である
+
+  # Document validation (inactive until configured)
+  # required-headings: { headings: [概要, 前提条件] }
+  # forbidden: { patterns: ["絶対に成功します", "/必ず.*します/"] }
+  # terminology:
+  #   terms:
+  #     - { preferred: GitHub, avoid: [Github, github] }
+
+gate:
+  fail-on: error
+  # max-warnings: 3

@@ -1,0 +1,41 @@
+[package]
+name = "issen"
+version = "0.1.0"
+edition = "2021"
+description = "Issen (一閃): Japanese document harness for AI agents. One pass, and what a generated document should not have is gone."
+license = "MIT"
+
+[lib]
+name = "issen"
+path = "src/lib.rs"
+
+[[bin]]
+name = "issen"
+path = "src/main.rs"
+
+[[bin]]
+name = "dump-tokens"
+path = "src/bin/dump_tokens.rs"
+
+[dependencies]
+# Morphology backend. Pinned exactly: Lindera bumps majors quickly (5.x -> 6.0 within
+# months in 2026), and every bump must pass tests/compat.rs before it is taken.
+lindera = { version = "=6.0.0", features = ["embed-ipadic"], optional = true }
+pulldown-cmark = "0.13"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+clap = { version = "4", features = ["derive"] }
+unicode-normalization = "0.1"
+regex = "1"
+
+[features]
+default = ["backend-lindera"]
+# Exactly one backend feature must be enabled. Adding another analyzer (Vibrato, a
+# MeCab binding, ...) means implementing `tokenizer::Morphology` behind a new feature.
+backend-lindera = ["dep:lindera"]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
