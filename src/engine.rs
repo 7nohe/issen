@@ -29,6 +29,9 @@ type TokenCache = HashMap<String, Vec<Token>>;
 
 impl Linter {
     pub fn new(config: Config) -> Result<Linter, String> {
+        for rule in rules::build(&config) {
+            rule.validate(&config.options(rule.id())).map_err(|e| format!("rules.{}: {e}", rule.id()))?;
+        }
         Ok(Linter { tokenizer: Tokenizer::new()?, config })
     }
 
@@ -132,19 +135,24 @@ pub fn apply_fixes(source: &str, diagnostics: &[Diagnostic]) -> (String, usize) 
 }
 
 fn to_diagnostic(doc: &Document, anchor: Anchor, rule: &str, severity: Severity, r: Report) -> Diagnostic {
-    let to_src = |b: usize| match anchor {
-        Anchor::Block(i) => doc.blocks[i].to_source(b),
-        Anchor::Source => b.min(doc.source.len()),
+    // A fix is dropped when the block layer says its span crosses inline
+    // markup: the diagnostic still stands, it just cannot be applied blindly.
+    let (start, end, fix) = match anchor {
+        Anchor::Source => (
+            r.start.min(doc.source.len()),
+            r.end.min(doc.source.len()),
+            r.fix.map(|f| (f.start.min(doc.source.len()), f.end.min(doc.source.len()), f.text)),
+        ),
+        Anchor::Block(i) => {
+            let blk = &doc.blocks[i];
+            let fix = r.fix.and_then(|f| blk.fix_range(f.start, f.end).map(|(s, e)| (s, e, f.text)));
+            (blk.to_source(r.start), blk.to_source_end(r.end), fix)
+        }
     };
-    let start = to_src(r.start);
-    let end = to_src(r.end).max(start);
+    let end = end.max(start);
     let (line, column) = doc.position(start);
     let (end_line, end_column) = doc.position(end);
-    let fix = r.fix.map(|f| {
-        let fs = to_src(f.start);
-        let fe = to_src(f.end).max(fs);
-        Fix { range: [doc.utf16_offset(fs), doc.utf16_offset(fe)], text: f.text }
-    });
+    let fix = fix.map(|(s, e, text)| Fix { range: [doc.utf16_offset(s), doc.utf16_offset(e.max(s))], text });
     Diagnostic {
         rule: rule.to_string(),
         severity,

@@ -12,7 +12,7 @@
 //! A rule's options are merged key by key over the ja-technical-writing preset,
 //! so `{ severity: warning }` keeps the preset's thresholds.
 
-use crate::diagnostic::Severity;
+use regex::Regex;
 use serde::Deserialize;
 use serde_yaml::Value;
 use std::collections::BTreeMap;
@@ -53,15 +53,77 @@ pub struct Gate {
     pub max_warnings: Option<usize>,
 }
 
+const FAIL_ON: [&str; 5] = ["error", "warning", "warn", "never", "none"];
+
 impl Gate {
     pub fn fails(&self, errors: usize, warnings: usize) -> bool {
-        let by_level = match self.fail_on.as_deref().map(Severity::parse) {
-            Some(Some(Severity::Warning)) => errors + warnings > 0,
-            Some(None) => false, // never / none / anything unknown
+        let by_level = match self.fail_on.as_deref() {
+            Some("never") | Some("none") => false,
+            Some("warning") | Some("warn") => errors + warnings > 0,
             _ => errors > 0,
         };
         by_level || self.max_warnings.map(|m| warnings > m).unwrap_or(false)
     }
+
+    fn validate(&self) -> Result<(), String> {
+        match &self.fail_on {
+            Some(v) if !FAIL_ON.contains(&v.as_str()) => {
+                Err(format!("gate.fail-on: unknown value \"{v}\". Use one of: {}", FAIL_ON.join(", ")))
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
+/// A configured pattern: a literal, or textlint's `/pattern/flags` form.
+#[derive(Debug)]
+pub enum Matcher {
+    Literal(String),
+    Regex(Regex),
+}
+
+impl Matcher {
+    /// `None` for an empty spec, which matches nothing.
+    pub fn parse(spec: &str) -> Result<Option<Matcher>, String> {
+        if spec.is_empty() {
+            return Ok(None);
+        }
+        let Some((pattern, flags)) = spec.strip_prefix('/').and_then(|b| b.rsplit_once('/')) else {
+            return Ok(Some(Matcher::Literal(spec.to_string())));
+        };
+        let mut inline = String::new();
+        for f in flags.chars() {
+            match f {
+                // Rust's regex is Unicode-aware and every search is global,
+                // so textlint's `u` and `g` are already how this behaves.
+                'i' | 'm' | 's' => inline.push(f),
+                'g' | 'u' => {}
+                other => return Err(format!("unknown regex flag \"{other}\" in \"{spec}\"")),
+            }
+        }
+        let source = if inline.is_empty() { pattern.to_string() } else { format!("(?{inline}){pattern}") };
+        Regex::new(&source).map(|re| Some(Matcher::Regex(re))).map_err(|e| format!("bad regex \"{spec}\": {e}"))
+    }
+
+    pub fn find_all<'a>(&self, text: &'a str) -> Vec<(usize, usize, &'a str)> {
+        match self {
+            Matcher::Literal(lit) => text.match_indices(lit.as_str()).map(|(i, m)| (i, i + m.len(), m)).collect(),
+            Matcher::Regex(re) => re.find_iter(text).map(|m| (m.start(), m.end(), m.as_str())).collect(),
+        }
+    }
+
+    /// The text with every match removed, as textlint's `skipPatterns` does.
+    pub fn remove_from(&self, text: &str) -> String {
+        match self {
+            Matcher::Literal(lit) => text.replace(lit.as_str(), ""),
+            Matcher::Regex(re) => re.replace_all(text, "").into_owned(),
+        }
+    }
+}
+
+/// Compile every entry of a string-list option into matchers.
+pub fn matchers(v: &Value, key: &str) -> Result<Vec<Matcher>, String> {
+    opt_strs(v, key).iter().filter_map(|p| Matcher::parse(p).transpose()).collect()
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -99,7 +161,26 @@ impl Config {
             base.rules.insert(k, merged);
         }
         base.gate = user.gate;
+        base.validate()?;
         Ok(base)
+    }
+
+    /// Reject a config that would otherwise fail quietly: a misspelled rule
+    /// name that disables nothing, or a gate value that lets errors through.
+    fn validate(&self) -> Result<(), String> {
+        self.gate.validate()?;
+        let known = crate::rules::all_ids();
+        for name in self.rules.keys() {
+            if !known.contains(&name.as_str()) {
+                let hint = known
+                    .iter()
+                    .find(|k| k.contains(name.as_str()) || name.contains(*k))
+                    .map(|k| format!(" Did you mean \"{k}\"?"))
+                    .unwrap_or_default();
+                return Err(format!("rules.{name}: unknown rule.{hint} Run `issen --list-rules` to see them all."));
+            }
+        }
+        Ok(())
     }
 
     pub fn options(&self, id: &str) -> Value {

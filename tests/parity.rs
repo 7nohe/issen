@@ -79,7 +79,8 @@ fn inline_node_exclusions_match_textlint() {
 
 #[test]
 fn exclamation_options_are_honoured() {
-    let linter = Linter::new(Config::parse("rules:\n  no-exclamation-question-mark: { allowFullWidthExclamation: true }\n").unwrap()).unwrap();
+    let linter =
+        Linter::new(Config::parse("rules:\n  no-exclamation-question-mark: { allowFullWidthExclamation: true }\n").unwrap()).unwrap();
     let r = linter.lint("t.md", "保存してください！\n\n本当ですか？\n");
     let marks: Vec<usize> = r.diagnostics.iter().filter(|d| d.rule == "no-exclamation-question-mark").map(|d| d.line).collect();
     assert_eq!(marks, vec![3]);
@@ -157,4 +158,77 @@ fn textlint_format_carries_every_field_its_formatters_read() {
     assert_eq!(m["loc"]["start"]["column"], m["column"]);
     assert_eq!(m["loc"]["end"], serde_json::json!({ "line": 3, "column": 4 }));
     assert!(m["fix"]["text"].is_string());
+}
+
+/// Everything below was reported by a pre-publication review. Each case is a
+/// way issen could quietly damage a document or quietly check nothing.
+mod review {
+    use super::*;
+
+    #[test]
+    fn a_fix_never_swallows_the_markup_around_it() {
+        let linter = Linter::preset().unwrap();
+        // The match sits inside one emphasis run: rewritable, markup intact.
+        assert_eq!(linter.fix("t.md", "**ﾃｽﾄ**です。\n").source, "**テスト**です。\n");
+        assert_eq!(linter.fix("t.md", "`x`ﾃｽﾄです。\n").source, "`x`テストです。\n");
+    }
+
+    #[test]
+    fn a_fix_spanning_markup_is_dropped_but_still_reported() {
+        let linter = Linter::preset().unwrap();
+        let fixed = linter.fix("t.md", "ﾃ*ｽ*ﾄです。\n");
+        // Rewriting would delete the `*`, so the fix is withheld.
+        assert_eq!(fixed.source, "ﾃ*ｽ*ﾄです。\n");
+        assert_eq!(fixed.applied, 0);
+        let d = fixed.result.diagnostics.iter().find(|d| d.rule == "no-hankaku-kana").unwrap();
+        assert!(d.fix.is_none(), "the diagnostic stands, only its fix is withheld");
+    }
+
+    #[test]
+    fn only_u200b_counts_as_a_zero_width_space() {
+        // U+200D joins the parts of an emoji; deleting it splits the family up.
+        assert!(!has("👨‍👩‍👧‍👦です。\n", "no-zero-width-spaces"));
+        assert!(has("あ\u{200B}い。\n", "no-zero-width-spaces"));
+        let linter = Linter::preset().unwrap();
+        assert_eq!(linter.fix("t.md", "👨‍👩‍👧‍👦です。\n").applied, 0);
+    }
+
+    #[test]
+    fn a_config_that_would_check_nothing_is_rejected() {
+        // A typo in the gate would let every error through with exit code 0.
+        assert!(Config::parse("gate: { fail-on: erorr }\n").is_err());
+        // A textlint-style preset key disables nothing here.
+        assert!(Config::parse("rules:\n  preset-ja-technical-writing: { max-ten: false }\n").is_err());
+        // A near-miss gets a suggestion.
+        let e = Config::parse("rules:\n  max-ten-x: true\n").unwrap_err();
+        assert!(e.contains("max-ten"), "{e}");
+        // An unusable regex means the rule silently matches nothing.
+        let bad = Config::parse("rules:\n  forbidden: { patterns: [\"/[/\"] }\n").unwrap();
+        assert!(Linter::new(bad).is_err());
+        assert!(Config::parse("rules:\n  sentence-length: { countBy: chars }\n").and_then(Linter::new).is_err());
+    }
+
+    #[test]
+    fn regex_options_honour_textlints_flags() {
+        let linter = Linter::new(Config::parse("rules:\n  sentence-length: { max: 3, skipPatterns: [\"/abc/i\"] }\n").unwrap()).unwrap();
+        assert!(linter.lint("t.md", "ABC。\n").diagnostics.is_empty());
+
+        let linter = Linter::new(Config::parse("rules:\n  forbidden: { patterns: [\"/NG/i\"] }\n").unwrap()).unwrap();
+        assert_eq!(linter.lint("t.md", "これは ng です。\n").diagnostics.iter().filter(|d| d.rule == "forbidden").count(), 1);
+    }
+
+    #[test]
+    fn inline_code_keeps_its_utf16_length_for_counting() {
+        // textlint measures the code's own text: `😀😀`。 is 5 code units.
+        let linter = Linter::new(Config::parse("rules:\n  sentence-length: { max: 3 }\n").unwrap()).unwrap();
+        let d = linter.lint("t.md", "`😀😀`。\n").diagnostics;
+        assert!(d.iter().any(|d| d.rule == "sentence-length" && d.message.contains("length(5)")), "{d:?}");
+    }
+
+    #[test]
+    fn control_characters_are_named_as_textlint_names_them() {
+        let linter = Linter::preset().unwrap();
+        let d = linter.lint("t.md", "制御\u{1}文字。\n").diagnostics;
+        assert!(d.iter().any(|d| d.message == "Found invalid control character(START OF HEADING \\u0001)"), "{d:?}");
+    }
 }

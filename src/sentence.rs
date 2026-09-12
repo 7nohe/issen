@@ -19,18 +19,8 @@ pub struct Sentence {
 /// this list so they never disagree with the splitter about boundaries.
 pub const TERMINATORS: [char; 6] = ['。', '！', '？', '!', '?', '．'];
 
-const PAIRS: [(char, char); 10] = [
-    ('「', '」'),
-    ('『', '』'),
-    ('（', '）'),
-    ('(', ')'),
-    ('[', ']'),
-    ('{', '}'),
-    ('【', '】'),
-    ('《', '》'),
-    ('〈', '〉'),
-    ('“', '”'),
-];
+const PAIRS: [(char, char); 10] =
+    [('「', '」'), ('『', '』'), ('（', '）'), ('(', ')'), ('[', ']'), ('{', '}'), ('【', '】'), ('《', '》'), ('〈', '〉'), ('“', '”')];
 
 pub fn is_terminator(c: char) -> bool {
     TERMINATORS.contains(&c)

@@ -1,0 +1,4 @@
+# The rules read as tables of linguistic conditions; 100 columns breaks them
+# into shapes that hide the pattern being expressed.
+max_width = 140
+use_small_heuristics = "Max"

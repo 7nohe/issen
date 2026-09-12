@@ -116,7 +116,7 @@ Twelve rules read Japanese morphology or script and only apply to Japanese text.
 
 The document validators (`required-headings`, `forbidden`, `terminology`) do nothing until the config names them.
 
-Messages for the ported rules are reproduced from textlint, so the Japanese rules speak Japanese.
+Messages come from textlint, so the Japanese rules speak Japanese. They are close but not identical: `ja-no-mixed-period` drops textlint's trailing advice, and `no-doubled-joshi` names the word before each particle where textlint sometimes cannot. The compatibility fixtures check rule IDs, lines, and columns, not wording.
 
 Not ported yet:
 
@@ -156,8 +156,11 @@ What is left still earns its keep: sentence length, comma count, invisible chara
 
 ```bash
 issen --format textlint docs/*.md > result.json
-npx @textlint/linter-formatter --formatter github result.json   # GitHub annotations
-npx @textlint/linter-formatter --formatter checkstyle result.json
+node -e '
+const { loadFormatter } = require("@textlint/linter-formatter");
+loadFormatter({ formatterName: "github" })      // or checkstyle, junit, stylish, ...
+  .then(f => console.log(f.format(require("./result.json"))));
+'
 ```
 
 What issen cannot use is a textlint *plugin*. Plugins are the processors that teach textlint new file formats, such as `textlint-plugin-latex` or `textlint-plugin-review`; issen reads Markdown and nothing else. Rules published as npm packages are equally out of reach. When you need either, run textlint over the same files and keep issen for the fast loop.
@@ -180,10 +183,17 @@ Lindera moves through major versions quickly, so `Cargo.toml` pins it exactly. R
 ```bash
 cargo build --release
 cargo test
+cargo fmt --check && cargo clippy --all-targets
 ```
 
-`tests/fixtures/*.md` are paired with `*.textlint.json`, the real output of textlint v15 with the preset. `tests/compat.rs` requires an exact match on rule ID, line, and column, with the two divergences above listed individually.
+`tests/fixtures/*.md` are paired with `*.textlint.json`, the real output of textlint. The versions that produced them are pinned in `tests/textlint/package.json`, and `tests/textlint/regenerate.sh` reproduces them. Run it only when you mean to move the compatibility target, and read the diff it makes.
+
+`tests/compat.rs` requires an exact match on rule ID, line, and column, with the two divergences above listed individually.
+
+CI runs the tests on Linux, macOS and Windows. It also checks formatting and clippy, builds on the declared `rust-version`, and lints this repository's own Japanese README with issen.
 
 ## License
 
-MIT
+MIT for issen itself; see `LICENSE`.
+
+Binaries built with the default feature embed the IPADIC dictionary. Its notice must travel with anything you redistribute. `NOTICE` carries that notice and the attribution for the ported rules.

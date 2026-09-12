@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "description": "Pinned textlint used to generate tests/fixtures/*.textlint.json. Bumping these versions means regenerating the fixtures and re-reading the diff.",
+  "dependencies": {
+    "textlint": "15.8.0",
+    "textlint-rule-preset-ja-technical-writing": "12.0.2"
+  }
+}

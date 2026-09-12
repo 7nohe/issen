@@ -2,7 +2,7 @@
 //! be reported by issen with the same rule ID, line, and column -- except for
 //! the individually listed, documented divergences.
 
-use issen::{Config, Linter};
+use issen::Linter;
 use serde_json::Value;
 use std::collections::HashMap;
 

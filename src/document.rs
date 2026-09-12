@@ -9,6 +9,12 @@
 
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
+/// Length in UTF-16 code units, the unit textlint measures in because its
+/// rules run on JavaScript strings.
+pub fn utf16_len(s: &str) -> usize {
+    s.chars().map(char::len_utf16).sum()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlockKind {
     Paragraph,
@@ -87,14 +93,26 @@ impl Block {
         i.checked_sub(1).map(|i| &self.segments[i])
     }
 
-    /// Map a byte offset in `text` to a byte offset in the source.
+    /// Index of the segment an offset that *starts* a span falls in. On a
+    /// boundary the span starts in the later segment.
+    fn start_index(&self, text_byte: usize) -> Option<usize> {
+        self.segments.partition_point(|s| s.text_start <= text_byte).checked_sub(1)
+    }
+
+    /// Index of the segment an offset that *ends* a span falls in. On a
+    /// boundary the span ends in the earlier segment.
+    fn end_index(&self, text_byte: usize) -> Option<usize> {
+        self.segments.partition_point(|s| s.text_start < text_byte).checked_sub(1)
+    }
+
+    /// Map a byte offset in `text` that starts a span to a byte offset in the source.
     ///
     /// Inside a verbatim segment the mapping is 1:1. Inside a segment whose
     /// source differs in length (masked code, an entity, a CRLF break) any
     /// interior offset resolves to the segment's source end, so a report can
     /// only ever cover the whole construct -- never land mid-character.
     pub fn to_source(&self, text_byte: usize) -> usize {
-        let Some(seg) = self.segment_at(text_byte) else {
+        let Some(seg) = self.start_index(text_byte).map(|i| &self.segments[i]) else {
             return self.segments.first().map(|s| s.src_start).unwrap_or(0);
         };
         if text_byte >= seg.text_end {
@@ -108,6 +126,40 @@ impl Block {
         } else {
             seg.src_end
         }
+    }
+
+    /// Map a byte offset in `text` that ends a span to a byte offset in the
+    /// source.
+    ///
+    /// A span ending exactly on a segment boundary ends at the previous
+    /// segment's source end, not at the next segment's source start. Those two
+    /// differ by whatever markup sits between them, so taking the latter would
+    /// stretch the span over a closing `**` or `` ` ``.
+    pub fn to_source_end(&self, text_byte: usize) -> usize {
+        let Some(seg) = self.end_index(text_byte).map(|i| &self.segments[i]) else {
+            return self.segments.first().map(|s| s.src_start).unwrap_or(0);
+        };
+        if text_byte >= seg.text_end || !seg.verbatim() {
+            seg.src_end
+        } else {
+            seg.src_start + (text_byte - seg.text_start)
+        }
+    }
+
+    /// The source range a fix may rewrite, or `None` when it must not.
+    ///
+    /// A fix is only safe while it stays inside one verbatim segment. A span
+    /// reaching across two of them covers source the block text never held --
+    /// the `*` around an emphasis, the backticks around code -- and rewriting
+    /// it would delete that markup.
+    pub fn fix_range(&self, start: usize, end: usize) -> Option<(usize, usize)> {
+        let i = self.start_index(start)?;
+        let j = self.end_index(end)?;
+        let seg = &self.segments[i];
+        if i != j || !seg.verbatim() || start < seg.text_start || end > seg.text_end {
+            return None;
+        }
+        Some((seg.src_start + (start - seg.text_start), seg.src_start + (end - seg.text_start)))
     }
 
     /// The block text within `range`, keeping only segments `keep` accepts.
@@ -243,9 +295,11 @@ impl Document {
                             inline.url_link = link_url.as_deref() == Some(s.as_ref());
                             (s.to_string(), SegmentKind::Text)
                         }
-                        // Inline code is masked with a same-length run of "ー" so it
-                        // tokenizes as one opaque word and never contributes particles.
-                        Event::Code(s) => ("ー".repeat(s.chars().count().max(1)), SegmentKind::Code),
+                        // Inline code is masked with a run of "ー" so it tokenizes as
+                        // one opaque word and never contributes particles. The run is
+                        // as long as the code itself in UTF-16, because textlint
+                        // measures the code's own text when it counts a sentence.
+                        Event::Code(s) => ("ー".repeat(utf16_len(s).max(1)), SegmentKind::Code),
                         _ => unreachable!(),
                     };
                     // A tight list carries item text directly, with no paragraph event.

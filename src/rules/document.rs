@@ -4,9 +4,8 @@
 //! default.
 
 use super::{Anchor, BlockData, Ctx, Report, Rule};
-use crate::config::opt_strs;
+use crate::config::{matchers, opt_strs, Matcher};
 use crate::document::BlockKind;
-use regex::Regex;
 
 /// required-headings: every configured heading text must appear as a heading.
 ///
@@ -40,31 +39,6 @@ impl Rule for RequiredHeadings {
     }
 }
 
-/// A configured pattern: a literal, or `/regex/`. Compiled once per lint.
-enum Needle {
-    Literal(String),
-    Regex(Regex),
-}
-
-impl Needle {
-    fn parse(s: &str) -> Option<Needle> {
-        if s.len() >= 2 && s.starts_with('/') && s.ends_with('/') {
-            Regex::new(&s[1..s.len() - 1]).ok().map(Needle::Regex)
-        } else if s.is_empty() {
-            None
-        } else {
-            Some(Needle::Literal(s.to_string()))
-        }
-    }
-
-    fn find_all<'a>(&self, text: &'a str) -> Vec<(usize, usize, &'a str)> {
-        match self {
-            Needle::Literal(lit) => text.match_indices(lit.as_str()).map(|(i, m)| (i, i + m.len(), m)).collect(),
-            Needle::Regex(re) => re.find_iter(text).map(|m| (m.start(), m.end(), m.as_str())).collect(),
-        }
-    }
-}
-
 /// forbidden: phrases that must not appear.
 ///
 /// ```yaml
@@ -72,7 +46,7 @@ impl Needle {
 /// ```
 #[derive(Default)]
 pub struct Forbidden {
-    needles: Option<Vec<Needle>>,
+    needles: Option<Vec<Matcher>>,
 }
 
 impl Rule for Forbidden {
@@ -82,10 +56,11 @@ impl Rule for Forbidden {
     fn default_enabled(&self) -> bool {
         false
     }
+    fn validate(&self, options: &serde_yaml::Value) -> Result<(), String> {
+        matchers(options, "patterns").map(|_| ())
+    }
     fn check(&mut self, blk: &BlockData, ctx: &Ctx) -> Vec<Report> {
-        let needles = self
-            .needles
-            .get_or_insert_with(|| opt_strs(&ctx.options, "patterns").iter().filter_map(|p| Needle::parse(p)).collect());
+        let needles = self.needles.get_or_insert_with(|| matchers(&ctx.options, "patterns").unwrap_or_default());
         let mut out: Vec<Report> = needles
             .iter()
             .flat_map(|n| n.find_all(blk.text()))
@@ -105,7 +80,7 @@ impl Rule for Forbidden {
 /// ```
 #[derive(Default)]
 pub struct Terminology {
-    terms: Option<Vec<(String, Vec<Needle>)>>,
+    terms: Option<Vec<(String, Vec<Matcher>)>>,
 }
 
 impl Rule for Terminology {
@@ -114,6 +89,15 @@ impl Rule for Terminology {
     }
     fn default_enabled(&self) -> bool {
         false
+    }
+    fn validate(&self, options: &serde_yaml::Value) -> Result<(), String> {
+        for term in options.get("terms").and_then(|t| t.as_sequence()).map(|s| s.as_slice()).unwrap_or_default() {
+            if term.get("preferred").and_then(|p| p.as_str()).is_none() {
+                return Err("terminology.terms: every entry needs a `preferred` string".to_string());
+            }
+            matchers(term, "avoid")?;
+        }
+        Ok(())
     }
     fn check(&mut self, blk: &BlockData, ctx: &Ctx) -> Vec<Report> {
         let terms = self.terms.get_or_insert_with(|| {
@@ -125,8 +109,7 @@ impl Rule for Terminology {
                         .iter()
                         .filter_map(|term| {
                             let preferred = term.get("preferred")?.as_str()?.to_string();
-                            let avoid = opt_strs(term, "avoid").iter().filter_map(|a| Needle::parse(a)).collect();
-                            Some((preferred, avoid))
+                            Some((preferred, matchers(term, "avoid").unwrap_or_default()))
                         })
                         .collect()
                 })

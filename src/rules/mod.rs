@@ -127,6 +127,11 @@ pub trait Rule {
     fn scope(&self) -> Scope {
         Scope::TEXT
     }
+    /// Reject options the rule cannot act on, so a bad config fails at start-up
+    /// rather than quietly checking nothing.
+    fn validate(&self, _options: &Value) -> Result<(), String> {
+        Ok(())
+    }
     /// Whether the rule runs when the config does not mention it.
     fn default_enabled(&self) -> bool {
         true
@@ -159,6 +164,11 @@ fn registry() -> Vec<Box<dyn Rule>> {
         Box::new(document::Forbidden::default()),
         Box::new(document::Terminology::default()),
     ]
+}
+
+/// Every rule ID, enabled or not.
+pub fn all_ids() -> Vec<&'static str> {
+    registry().iter().map(|r| r.id()).collect()
 }
 
 pub fn build(config: &Config) -> Vec<Box<dyn Rule>> {

@@ -1,17 +1,11 @@
 //! Rules that work on characters alone (no morphology needed).
 
 use super::{BlockData, Ctx, Report, Rule, Scope};
-use crate::config::{opt_bool, opt_str, opt_strs, opt_usize};
-use crate::document::SegmentKind;
+use crate::config::{matchers, opt_bool, opt_str, opt_strs, opt_usize, Matcher};
+use crate::document::{utf16_len, SegmentKind};
 use regex::Regex;
 use std::sync::OnceLock;
 use unicode_normalization::UnicodeNormalization;
-
-/// Length in UTF-16 code units, the unit textlint measures in because its
-/// rules run on JavaScript strings.
-pub fn utf16_len(s: &str) -> usize {
-    s.chars().map(char::len_utf16).sum()
-}
 
 /// Han characters as textlint's kanji rules define them.
 pub fn is_kanji(c: char) -> bool {
@@ -29,7 +23,7 @@ fn is_japanese(text: &str) -> bool {
 /// counting.
 #[derive(Default)]
 pub struct SentenceLength {
-    skip_patterns: Option<Vec<Regex>>,
+    skip_patterns: Option<Vec<Matcher>>,
 }
 impl Rule for SentenceLength {
     fn id(&self) -> &'static str {
@@ -38,15 +32,17 @@ impl Rule for SentenceLength {
     fn scope(&self) -> Scope {
         Scope::PROSE
     }
+    fn validate(&self, options: &serde_yaml::Value) -> Result<(), String> {
+        matchers(options, "skipPatterns").map(|_| ())?;
+        match opt_str(options, "countBy", "codeunits").as_str() {
+            "codeunits" | "codepoints" => Ok(()),
+            other => Err(format!("sentence-length.countBy: unknown value \"{other}\". Use codeunits or codepoints.")),
+        }
+    }
     fn check(&mut self, blk: &BlockData, ctx: &Ctx) -> Vec<Report> {
         let max = opt_usize(&ctx.options, "max", 100);
         let skip_url_links = opt_bool(&ctx.options, "skipUrlStringLink", true);
-        let skip_patterns = self.skip_patterns.get_or_insert_with(|| {
-            opt_strs(&ctx.options, "skipPatterns")
-                .iter()
-                .filter_map(|p| Regex::new(p.trim_start_matches('/').trim_end_matches('/')).ok())
-                .collect()
-        });
+        let skip_patterns = self.skip_patterns.get_or_insert_with(|| matchers(&ctx.options, "skipPatterns").unwrap_or_default());
         if blk.block.segments.iter().all(|s| s.in_link || s.kind == SegmentKind::Break) {
             return Vec::new();
         }
@@ -54,20 +50,19 @@ impl Rule for SentenceLength {
         let mut out = Vec::new();
         for s in &blk.sentences {
             let mut text = blk.block.text_where(s.byte_range.clone(), |seg| !(skip_url_links && seg.url_link));
-            for re in skip_patterns.iter() {
-                text = re.replace_all(&text, "").into_owned();
+            for m in skip_patterns.iter() {
+                text = m.remove_from(&text);
             }
-            let len = if opt_str(&ctx.options, "countBy", "codeunits") == "codepoints" {
-                text.chars().count()
-            } else {
-                utf16_len(&text)
-            };
+            let len = if opt_str(&ctx.options, "countBy", "codeunits") == "codepoints" { text.chars().count() } else { utf16_len(&text) };
             if len > max {
                 let line = ctx.line_of(blk, s.byte_range.start);
                 out.push(Report::at(
                     s.byte_range.start,
                     s.byte_range.end,
-                    format!("Line {line} sentence length({len}) exceeds the maximum sentence length of {max}.\nOver {} characters.", len - max),
+                    format!(
+                        "Line {line} sentence length({len}) exceeds the maximum sentence length of {max}.\nOver {} characters.",
+                        len - max
+                    ),
                 ));
             }
         }
@@ -153,6 +148,9 @@ impl Rule for NoExclamationQuestionMark {
     }
 }
 
+/// no-zero-width-spaces. Only U+200B, as textlint has it. The neighbouring
+/// invisibles are load-bearing: U+200D joins the parts of an emoji, and
+/// deleting it rewrites 👨‍👩‍👧‍👦 into four separate people.
 pub struct NoZeroWidthSpaces;
 impl Rule for NoZeroWidthSpaces {
     fn id(&self) -> &'static str {
@@ -164,9 +162,54 @@ impl Rule for NoZeroWidthSpaces {
     fn check(&mut self, blk: &BlockData, _ctx: &Ctx) -> Vec<Report> {
         blk.text()
             .char_indices()
-            .filter(|(_, c)| matches!(c, '\u{200B}' | '\u{200C}' | '\u{200D}' | '\u{2060}' | '\u{FEFF}'))
+            .filter(|(_, c)| *c == '\u{200B}')
             .map(|(i, c)| Report::at(i, i + c.len_utf8(), "Zero width space is disallowed.").replace(""))
             .collect()
+    }
+}
+
+/// Names for the control characters, so the message reads like textlint's.
+const CONTROL_NAMES: [&str; 33] = [
+    "NULL",
+    "START OF HEADING",
+    "START OF TEXT",
+    "END OF TEXT",
+    "END OF TRANSMISSION",
+    "ENQUIRY",
+    "ACKNOWLEDGE",
+    "BELL",
+    "BACKSPACE",
+    "CHARACTER TABULATION",
+    "LINE FEED (LF)",
+    "LINE TABULATION",
+    "FORM FEED (FF)",
+    "CARRIAGE RETURN (CR)",
+    "SHIFT OUT",
+    "SHIFT IN",
+    "DATA LINK ESCAPE",
+    "DEVICE CONTROL ONE",
+    "DEVICE CONTROL TWO",
+    "DEVICE CONTROL THREE",
+    "DEVICE CONTROL FOUR",
+    "NEGATIVE ACKNOWLEDGE",
+    "SYNCHRONOUS IDLE",
+    "END OF TRANSMISSION BLOCK",
+    "CANCEL",
+    "END OF MEDIUM",
+    "SUBSTITUTE",
+    "ESCAPE",
+    "INFORMATION SEPARATOR FOUR",
+    "INFORMATION SEPARATOR THREE",
+    "INFORMATION SEPARATOR TWO",
+    "INFORMATION SEPARATOR ONE",
+    "DELETE",
+];
+
+fn control_name(c: char) -> &'static str {
+    match c as u32 {
+        n @ 0..=0x1F => CONTROL_NAMES[n as usize],
+        0x7F => CONTROL_NAMES[32],
+        _ => "CONTROL",
     }
 }
 
@@ -182,7 +225,10 @@ impl Rule for NoInvalidControlCharacter {
         blk.text()
             .char_indices()
             .filter(|(_, c)| (c.is_control() && !matches!(c, '\t' | '\n' | '\r')) || *c == '\u{7F}')
-            .map(|(i, c)| Report::at(i, i + c.len_utf8(), format!("Found invalid control character(U+{:04X})", c as u32)).replace(""))
+            .map(|(i, c)| {
+                let msg = format!("Found invalid control character({} \\u{:04X})", control_name(c), c as u32);
+                Report::at(i, i + c.len_utf8(), msg).replace("")
+            })
             .collect()
     }
 }
@@ -206,8 +252,12 @@ impl Rule for NoNfd {
                 let pair: String = [pc, c].iter().collect();
                 let expected: String = [pc, combining].iter().collect::<String>().nfc().collect();
                 out.push(
-                    Report::at(i, i + c.len_utf8(), format!("Disallow to use NFD(well-known as UTF8-MAC 濁点): \"{pair}\" => \"{expected}\""))
-                        .with_fix(pi, i + c.len_utf8(), expected),
+                    Report::at(
+                        i,
+                        i + c.len_utf8(),
+                        format!("Disallow to use NFD(well-known as UTF8-MAC 濁点): \"{pair}\" => \"{expected}\""),
+                    )
+                    .with_fix(pi, i + c.len_utf8(), expected),
                 );
             }
             prev = Some((i, c));

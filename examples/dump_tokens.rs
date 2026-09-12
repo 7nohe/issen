@@ -1,12 +1,22 @@
-//! Dump tokens line by line as JSON, in the shape `tests/compare-textlint.js`
-//! and the kuromoji.js parity check expect:
+//! Debug aid: dump tokens line by line as JSON, for comparing issen's
+//! morphology against kuromoji.js. Run with `cargo run --example dump-tokens -- <file>`.
+//! Each entry is
 //! `surface|pos|pd1|pd2|pd3|conj_type|conj_form|base|char_start`.
 
 use issen::tokenizer::Tokenizer;
 
 fn main() {
-    let path = std::env::args().nth(1).expect("usage: dump-tokens <file>");
-    let text = std::fs::read_to_string(&path).expect("read file");
+    let Some(path) = std::env::args().nth(1) else {
+        eprintln!("usage: cargo run --example dump-tokens -- <file>");
+        std::process::exit(2);
+    };
+    let text = match std::fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("dump-tokens: {path}: {e}");
+            std::process::exit(2);
+        }
+    };
     let tokenizer = Tokenizer::new().expect("tokenizer");
     let mut out: Vec<Vec<String>> = Vec::new();
     for line in text.lines() {

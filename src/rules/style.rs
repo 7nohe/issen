@@ -105,7 +105,11 @@ impl NoMixDearuDesumasu {
             Some(Style::Desumasu) if dearu != 0 => Style::Desumasu,
             Some(Style::Dearu) if desumasu != 0 => Style::Dearu,
             None if dearu != 0 && desumasu != 0 => {
-                if dearu > desumasu { Style::Dearu } else { Style::Desumasu }
+                if dearu > desumasu {
+                    Style::Dearu
+                } else {
+                    Style::Desumasu
+                }
             }
             _ => return Vec::new(),
         };
@@ -148,9 +152,13 @@ impl Rule for NoMixDearuDesumasu {
         Vec::new()
     }
     fn finish(&mut self, ctx: &Ctx) -> Vec<(Anchor, Report)> {
-        [(BlockKind::Paragraph, "本文", "preferInBody"), (BlockKind::Heading, "見出し", "preferInHeader"), (BlockKind::ListItem, "箇条書き", "preferInList")]
-            .into_iter()
-            .flat_map(|(kind, label, key)| self.reports(kind, label, Style::parse(&opt_str(&ctx.options, key, ""))))
-            .collect()
+        [
+            (BlockKind::Paragraph, "本文", "preferInBody"),
+            (BlockKind::Heading, "見出し", "preferInHeader"),
+            (BlockKind::ListItem, "箇条書き", "preferInList"),
+        ]
+        .into_iter()
+        .flat_map(|(kind, label, key)| self.reports(kind, label, Style::parse(&opt_str(&ctx.options, key, ""))))
+        .collect()
     }
 }

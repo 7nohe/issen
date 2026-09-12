@@ -4,6 +4,14 @@ version = "0.1.0"
 edition = "2021"
 description = "Issen (一閃): Japanese document harness for AI agents. One pass, and what a generated document should not have is gone."
 license = "MIT"
+repository = "https://github.com/7nohe/issen"
+readme = "README.md"
+keywords = ["japanese", "lint", "textlint", "markdown", "nlp"]
+categories = ["command-line-utilities", "text-processing"]
+# Set by what the dependency tree demands, not by issen itself; the msrv CI job
+# builds with exactly this version.
+rust-version = "1.88"
+
 
 [lib]
 name = "issen"
@@ -13,9 +21,9 @@ path = "src/lib.rs"
 name = "issen"
 path = "src/main.rs"
 
-[[bin]]
+[[example]]
 name = "dump-tokens"
-path = "src/bin/dump_tokens.rs"
+path = "examples/dump_tokens.rs"
 
 [dependencies]
 # Morphology backend. Pinned exactly: Lindera bumps majors quickly (5.x -> 6.0 within
@@ -24,7 +32,10 @@ lindera = { version = "=6.0.0", features = ["embed-ipadic"], optional = true }
 pulldown-cmark = "0.13"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-serde_yaml = "0.9"
+# Published as 0.9.34+deprecated and no longer maintained upstream. Kept on
+# purpose: the successor forks have not settled on one, and the surface used
+# here is a YAML mapping parse. Revisit when a clear successor emerges.
+serde_yaml = "=0.9.34"
 clap = { version = "4", features = ["derive"] }
 unicode-normalization = "0.1"
 regex = "1"

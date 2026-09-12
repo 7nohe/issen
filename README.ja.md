@@ -118,7 +118,7 @@ gate:
 
 文書バリデータの `required-headings`、`forbidden`、`terminology` は、設定に名前を書くまで何もしません。
 
-移植したルールのメッセージは textlint のものをそのまま使っています。
+メッセージは textlint から取っていますが、完全一致ではありません。`ja-no-mixed-period` は textlint の末尾の助言を省きます。`no-doubled-joshi` は各助詞の直前の語を示しますが、textlint は示せない場合があります。互換 fixture が見るのは rule ID と行と列で、文言は対象外です。
 
 未移植は次の 6 つです。
 
@@ -158,8 +158,11 @@ rules:
 
 ```bash
 issen --format textlint docs/*.md > result.json
-npx @textlint/linter-formatter --formatter github result.json   # GitHub の注釈
-npx @textlint/linter-formatter --formatter checkstyle result.json
+node -e '
+const { loadFormatter } = require("@textlint/linter-formatter");
+loadFormatter({ formatterName: "github" })      // checkstyle、junit、stylish なども可
+  .then(f => console.log(f.format(require("./result.json"))));
+'
 ```
 
 一方、textlint の *plugin* は使えません。plugin とは textlint に新しいファイル形式を教える processor です。`textlint-plugin-latex` や `textlint-plugin-review` が該当します。issen が読むのは Markdown だけです。npm で公開されたルールも同様に読み込めません。どちらかが必要なときは、同じファイルに textlint をかけ、速いループには issen を使ってください。
@@ -182,10 +185,15 @@ Lindera はメジャーバージョンの更新が速いため、`Cargo.toml` �
 ```bash
 cargo build --release
 cargo test
+cargo fmt --check && cargo clippy --all-targets
 ```
 
-`tests/fixtures/*.md` と対になる `*.textlint.json` は、textlint v15 とプリセットの実出力です。`tests/compat.rs` が rule ID・行・列の完全一致を要求します。上に挙げた 2 つの差だけは個別に列挙してあります。
+`tests/fixtures/*.md` と対になる `*.textlint.json` は textlint の実出力です。生成に使ったバージョンは `tests/textlint/package.json` に固定してあり、`tests/textlint/regenerate.sh` で再現できます。互換の基準を動かすときだけ実行し、差分を読んでください。`tests/compat.rs` は rule ID・行・列の完全一致を要求します。上に挙げた 2 つの差だけは個別に列挙してあります。
+
+CI は Linux・macOS・Windows でテストを回します。あわせてフォーマットと clippy を確認し、宣言した `rust-version` でビルドします。最後にこのリポジトリ自身の日本語 README を issen にかけます。
 
 ## ライセンス
 
-MIT
+issen 自体は MIT です。`LICENSE` を見てください。
+
+既定の feature でビルドしたバイナリは IPADIC 辞書を埋め込みます。この辞書の通知は再配布物に添える必要があります。`NOTICE` がその通知と、移植元ルールの帰属をまとめています。

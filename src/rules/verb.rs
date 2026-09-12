@@ -47,7 +47,12 @@ impl Pattern {
 /// per-token test that every pattern needs somewhere; a block with no token
 /// passing it is skipped without matching. `report` builds the finding from
 /// the pattern and the first/last matched token indices.
-fn scan(blk: &BlockData, patterns: &[Pattern], gate: impl Fn(&Token) -> bool, report: impl Fn(&Pattern, usize, usize) -> Report) -> Vec<Report> {
+fn scan(
+    blk: &BlockData,
+    patterns: &[Pattern],
+    gate: impl Fn(&Token) -> bool,
+    report: impl Fn(&Pattern, usize, usize) -> Report,
+) -> Vec<Report> {
     if !blk.tokens.iter().any(gate) {
         return Vec::new();
     }
@@ -78,7 +83,8 @@ macro_rules! ex {
 const NAI: &[&str] = &["ない", "無い"];
 const NAI_ANY: Expect = Expect { basic_form: NAI, ..EMPTY };
 const NAI_ADJ: Expect = Expect { basic_form: NAI, pos: &["形容詞"], ..EMPTY };
-const EMPTY: Expect = Expect { surface: &[], pos: &[], pos_detail_1: &[], conjugated_type: &[], conjugated_form: &[], basic_form: &[], reading: &[] };
+const EMPTY: Expect =
+    Expect { surface: &[], pos: &[], pos_detail_1: &[], conjugated_type: &[], conjugated_form: &[], basic_form: &[], reading: &[] };
 
 fn joshi(s: &'static [&'static str]) -> Expect {
     Expect { surface: s, pos: &["助詞"], ..EMPTY }
@@ -129,7 +135,12 @@ fn double_negative_patterns() -> &'static [Pattern] {
             })
         };
         let mut out: Vec<Pattern> = [
-            pair("ないことはない", "ないこともない", &[&[NAI_ANY], &[koto]], &[Expect { conjugated_type: &["特殊・ナイ"], ..NAI_ANY }, NAI_ADJ]),
+            pair(
+                "ないことはない",
+                "ないこともない",
+                &[&[NAI_ANY], &[koto]],
+                &[Expect { conjugated_type: &["特殊・ナイ"], ..NAI_ANY }, NAI_ADJ],
+            ),
             pair("なくはない", "なくもない", &[&[naku]], &[NAI_ANY]),
             pair("ないではない", "ないでもない", &[&[NAI_ANY], &[de]], &[NAI_ADJ]),
             pair("ないものではない", "ないものでもない", &[&[NAI_ANY], &[mono], &[da_renyou]], &[NAI_ADJ]),
@@ -140,7 +151,13 @@ fn double_negative_patterns() -> &'static [Pattern] {
         .collect();
         out.push(Pattern::new(
             "ないとはいいきれない",
-            &[&[NAI_ANY], &[joshi(&["と"])], &[joshi(&["は"])], &[ex!(basic_form: ["言い切れる", "いい切れる", "言いきれる", "いいきれる"])], &[NAI_ANY]],
+            &[
+                &[NAI_ANY],
+                &[joshi(&["と"])],
+                &[joshi(&["は"])],
+                &[ex!(basic_form: ["言い切れる", "いい切れる", "言いきれる", "いいきれる"])],
+                &[NAI_ANY],
+            ],
         ));
         out.push(Pattern::new(
             "ないとはかぎらない",
@@ -160,9 +177,12 @@ impl Rule for NoDoubleNegativeJa {
     }
     fn check(&mut self, blk: &BlockData, _ctx: &Ctx) -> Vec<Report> {
         // textlint reports at the token that completes the pattern.
-        scan(blk, double_negative_patterns(), |t| NAI.contains(&t.basic_form()), |p, _, last| {
-            Report::token(&blk.tokens[last], format!("二重否定: 〜{}", p.label))
-        })
+        scan(
+            blk,
+            double_negative_patterns(),
+            |t| NAI.contains(&t.basic_form()),
+            |p, _, last| Report::token(&blk.tokens[last], format!("二重否定: 〜{}", p.label)),
+        )
     }
 }
 
@@ -172,7 +192,10 @@ fn weak_phrase_patterns() -> &'static [Pattern] {
         let kamo = ex!(surface: ["かも"], pos: ["助詞"], pos_detail_1: ["副助詞"]);
         vec![
             Pattern::new("かも", &[&[kamo], &[ex!(surface: ["。"], pos: ["記号"])]]),
-            Pattern::new("かも", &[&[kamo], &[ex!(surface: ["しれ"], pos: ["動詞"], basic_form: ["しれる"], conjugated_form: ["連用形", "未然形"])]]),
+            Pattern::new(
+                "かも",
+                &[&[kamo], &[ex!(surface: ["しれ"], pos: ["動詞"], basic_form: ["しれる"], conjugated_form: ["連用形", "未然形"])]],
+            ),
             Pattern::new("思う", &[&[ex!(surface: ["思う"], pos: ["動詞"], conjugated_form: ["基本形"], basic_form: ["思う"])]]),
             Pattern::new(
                 "思います",
