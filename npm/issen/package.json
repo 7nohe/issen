@@ -1,0 +1,38 @@
+{
+  "name": "issen",
+  "version": "0.0.0",
+  "description": "Fast, deterministic linter for Japanese Markdown prose, built as a harness for AI-generated documents.",
+  "keywords": [
+    "japanese",
+    "lint",
+    "linter",
+    "markdown",
+    "textlint",
+    "cli"
+  ],
+  "homepage": "https://github.com/7nohe/issen",
+  "bugs": "https://github.com/7nohe/issen/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/7nohe/issen.git",
+    "directory": "npm/issen"
+  },
+  "license": "MIT",
+  "bin": {
+    "issen": "bin/issen"
+  },
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "bin/issen",
+    "index.js",
+    "index.d.ts",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {}
+}
