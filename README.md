@@ -7,7 +7,7 @@ A fast, deterministic Markdown linter for Japanese prose — built as a harness 
 Issen (一閃) is a single flash of the blade: one pass, and what the document should not carry is gone.
 
 - Morphological analysis by [Lindera](https://github.com/lindera/lindera) with the embedded IPADIC dictionary. One binary, no external process, no network.
-- Rules are ported from `textlint-rule-preset-ja-technical-writing`. Fixtures check that issen reports the same rule ID, line, and column as textlint does.
+- Rules are ported from `textlint-rule-preset-ja-technical-writing`. Over a corpus of 950 Japanese documents issen reproduces 97.9% of what textlint reports on the rules it implements -- see [COMPATIBILITY.md](COMPATIBILITY.md).
 - Output for people (text), for agents (JSON with character offsets and fixes), and for comparison (textlint-compatible JSON).
 
 ## What this is, and is not
@@ -116,7 +116,7 @@ Twelve rules read Japanese morphology or script and only apply to Japanese text.
 
 The document validators (`required-headings`, `forbidden`, `terminology`) do nothing until the config names them.
 
-Messages come from textlint, so the Japanese rules speak Japanese. They are close but not identical: `ja-no-mixed-period` drops textlint's trailing advice, and `no-doubled-joshi` names the word before each particle where textlint sometimes cannot. The compatibility fixtures check rule IDs, lines, and columns, not wording.
+Messages come from textlint, so the Japanese rules speak Japanese. They are close but not identical: `ja-no-mixed-period` drops textlint's trailing advice, and `no-doubled-joshi` names the word before each particle where textlint sometimes cannot. The compatibility fixtures check rule IDs and offsets, not wording.
 
 Not ported yet:
 
@@ -167,10 +167,13 @@ What issen cannot use is a textlint *plugin*. Plugins are the processors that te
 
 ## Known differences from textlint
 
-- `no-dropping-the-ra` on 来れる / 見れる: textlint reports a column one off (it passes a 1-based position straight through as an index). issen reports the real position.
-- `sentence-length`: textlint reports a paragraph-relative column. issen reports the start of the sentence.
-- Text inside links and emphasis is checked by more rules here than in textlint.
-- `range` spans the whole match here. textlint reports a single code unit for the rules that hand it only an index, among them `max-kanji-continuous-len`, `no-dropping-the-ra`, and `no-double-negative-ja`. The line and column agree either way.
+[COMPATIBILITY.md](COMPATIBILITY.md) measures these against a 950-document corpus and explains each one. In short:
+
+- Compare the two tools on `index`, not on `column`. textlint's own `sentence-length` column disagrees with its own index.
+- `no-dropping-the-ra` on 来れる / 見れる: textlint reports a position one off (it passes a 1-based position straight through as an index). issen reports the real position.
+- The Markdown parsers differ on lazy continuation, inline HTML and autolinks, so a few blocks are classified differently.
+- `sentence-length` and `max-comma` anchor inside a finding differently. The detection is the same.
+- `range` spans the whole match here. textlint reports a single code unit for the rules that hand it only an index, among them `max-kanji-continuous-len`, `no-dropping-the-ra`, and `no-double-negative-ja`.
 
 ## Morphology backend
 
@@ -186,7 +189,7 @@ cargo test
 cargo fmt --check && cargo clippy --all-targets
 ```
 
-`tests/fixtures/*.md` are paired with `*.textlint.json`, the real output of textlint. The versions that produced them are pinned in `tests/textlint/package.json`, and `tests/textlint/regenerate.sh` reproduces them. Run it only when you mean to move the compatibility target, and read the diff it makes.
+`tests/fixtures/*.md` are paired with `*.textlint.json`, the real output of textlint. The versions that produced them are pinned in `tests/textlint/package.json`, and `tests/textlint/regenerate.sh` reproduces them. Run it only when you mean to move the compatibility target, and read the diff it makes. `tests/compat.rs` demands an exact match on rule ID and offset, with the one documented divergence listed individually.
 
 `tests/compat.rs` requires an exact match on rule ID, line, and column, with the two divergences above listed individually.
 

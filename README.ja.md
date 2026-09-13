@@ -7,7 +7,7 @@ AI エージェントが書いた日本語 Markdown を、高速かつ決定論�
 名は「一閃」。刃が一度きらめけば、文書に不要なものは落ちています。
 
 - 形態素解析は [Lindera](https://github.com/lindera/lindera) と同梱の IPA 辞書による。単一バイナリで、外部プロセスやネットワークは不要
-- ルールは `textlint-rule-preset-ja-technical-writing` からの移植。同じ入力に対して textlint と同じ rule ID・行・列を返すことを fixture で確認している
+- ルールは `textlint-rule-preset-ja-technical-writing` からの移植。日本語文書 950 件のコーパスで、実装済みルールについて textlint の報告の 97.9% を再現する（[COMPATIBILITY.ja.md](COMPATIBILITY.ja.md)）
 - 出力は 3 種類。人向けのテキスト、エージェント向けの JSON、比較用の textlint 互換 JSON
 
 ## これは何で、何ではないか
@@ -118,7 +118,7 @@ gate:
 
 文書バリデータの `required-headings`、`forbidden`、`terminology` は、設定に名前を書くまで何もしません。
 
-メッセージは textlint から取っていますが、完全一致ではありません。`ja-no-mixed-period` は textlint の末尾の助言を省きます。`no-doubled-joshi` は各助詞の直前の語を示しますが、textlint は示せない場合があります。互換 fixture が見るのは rule ID と行と列で、文言は対象外です。
+メッセージは textlint から取っていますが、完全一致ではありません。`ja-no-mixed-period` は textlint の末尾の助言を省きます。`no-doubled-joshi` は各助詞の直前の語を示しますが、textlint は示せない場合があります。互換 fixture が見るのは rule ID とオフセットで、文言は対象外です。
 
 未移植は次の 6 つです。
 
@@ -169,10 +169,13 @@ loadFormatter({ formatterName: "github" })      // checkstyle、junit、stylish 
 
 ## textlint との既知の差
 
-- `no-dropping-the-ra` の `来れる`・`見れる` では、textlint の列が 1 文字ずれる。1 始まりの位置をそのまま index に使っているため。issen は実際の位置を返す
-- `sentence-length` の列は、textlint が段落を基準にした値を返す。issen は文の先頭を返す
-- リンクと強調の中のテキストは、textlint より多くのルールが検査の対象にしている
-- `range` は一致した範囲全体を指す。textlint は位置だけを渡すルールで 1 コードユニットを返す。`max-kanji-continuous-len`、`no-dropping-the-ra`、`no-double-negative-ja` などが該当する。行と列はどちらも一致する
+[COMPATIBILITY.ja.md](COMPATIBILITY.ja.md) に 950 件のコーパスでの実測と各差分の説明があります。要点は次のとおりです。
+
+- 2 つのツールを比較するときは `column` ではなく `index` を見ること。textlint の `sentence-length` は自身の index と食い違う列を返す
+- `no-dropping-the-ra` の `来れる`・`見れる` では、textlint の位置が 1 文字ずれる。1 始まりの位置をそのまま index に使っているため。issen は実際の位置を返す
+- Markdown パーサが lazy continuation・インライン HTML・自動リンクで異なるため、一部のブロックの分類が変わる
+- `sentence-length` と `max-comma` は、検出内容は同じで、その中のどの文字を指すかが違う
+- `range` は一致した範囲全体を指す。textlint は位置だけを渡すルールで 1 コードユニットを返す。`max-kanji-continuous-len`、`no-dropping-the-ra`、`no-double-negative-ja` などが該当する
 
 ## 形態素解析バックエンド
 
@@ -188,7 +191,7 @@ cargo test
 cargo fmt --check && cargo clippy --all-targets
 ```
 
-`tests/fixtures/*.md` と対になる `*.textlint.json` は textlint の実出力です。生成に使ったバージョンは `tests/textlint/package.json` に固定してあり、`tests/textlint/regenerate.sh` で再現できます。互換の基準を動かすときだけ実行し、差分を読んでください。`tests/compat.rs` は rule ID・行・列の完全一致を要求します。上に挙げた 2 つの差だけは個別に列挙してあります。
+`tests/fixtures/*.md` と対になる `*.textlint.json` は textlint の実出力です。生成に使ったバージョンは `tests/textlint/package.json` に固定してあり、`tests/textlint/regenerate.sh` で再現できます。互換の基準を動かすときだけ実行し、差分を読んでください。`tests/compat.rs` は rule ID とオフセットの完全一致を要求します。上に挙げた差のうち 1 件だけは個別に列挙してあります。
 
 CI は Linux・macOS・Windows でテストを回します。あわせてフォーマットと clippy を確認し、宣言した `rust-version` でビルドします。最後にこのリポジトリ自身の日本語 README を issen にかけます。
 

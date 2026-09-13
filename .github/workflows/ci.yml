@@ -48,11 +48,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --locked
 
-  # issen lints its own Japanese README with its own preset.
+  # issen lints its own Japanese documents with its own preset.
   dogfood:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo run --locked --release -- README.ja.md
+      - run: cargo run --locked --release -- README.ja.md COMPATIBILITY.ja.md
