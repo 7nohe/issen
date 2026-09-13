@@ -89,7 +89,7 @@ gate:
 
 ## Rules
 
-Twelve rules read Japanese morphology or script and only apply to Japanese text. The rest work on any language.
+The table lists all 20 rules: the 17 ported from the preset, which are on by default and are what `--list-rules` shows, and 3 document validators. Twelve of them read Japanese morphology or script and only apply to Japanese text. The rest work on any language.
 
 | rule | what it checks | Japanese-specific | needs morphology |
 | --- | --- | --- | --- |
