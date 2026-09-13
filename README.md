@@ -191,9 +191,17 @@ cargo fmt --check && cargo clippy --all-targets
 
 `tests/fixtures/*.md` are paired with `*.textlint.json`, the real output of textlint. The versions that produced them are pinned in `tests/textlint/package.json`, and `tests/textlint/regenerate.sh` reproduces them. Run it only when you mean to move the compatibility target, and read the diff it makes. `tests/compat.rs` demands an exact match on rule ID and offset, with the one documented divergence listed individually.
 
-`tests/compat.rs` requires an exact match on rule ID, line, and column, with the two divergences above listed individually.
+CI runs the tests on Linux, macOS and Windows. It also checks formatting and clippy, builds on the declared `rust-version`, and lints this repository's own Japanese documents with issen.
 
-CI runs the tests on Linux, macOS and Windows. It also checks formatting and clippy, builds on the declared `rust-version`, and lints this repository's own Japanese README with issen.
+## Versioning
+
+issen follows Semantic Versioning, read for a linter whose output other people's CI depends on. What the version protects is the command line, `issen.yml`, and the JSON output. The Rust library surface is not stable while the version is 0.x.
+
+- A minor release may fail a build that used to pass: a new rule enabled by default, or a raised `rust-version`. While in 0.x, a minor release may also change the command line, configuration, or JSON output incompatibly, and the changelog says so.
+- A patch release fixes bugs. When issen was reporting the wrong thing, the fix changes what is reported, which can add findings.
+- New fields in the JSON output are not breaking. Removed or renamed ones are.
+
+Pin an exact version in CI if every change in findings should be a deliberate upgrade. Changes are recorded in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
