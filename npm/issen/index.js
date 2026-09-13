@@ -1,22 +1,7 @@
 "use strict";
 
 const fs = require("node:fs");
-
-// Release target -> npm platform package. build.mjs reads this table too, so the
-// packages it assembles and the ones resolved here cannot drift apart.
-const PLATFORMS = [
-  { target: "aarch64-apple-darwin", os: "darwin", cpu: "arm64" },
-  { target: "x86_64-apple-darwin", os: "darwin", cpu: "x64" },
-  { target: "aarch64-unknown-linux-gnu", os: "linux", cpu: "arm64", libc: "glibc" },
-  { target: "x86_64-unknown-linux-gnu", os: "linux", cpu: "x64", libc: "glibc" },
-  { target: "aarch64-unknown-linux-musl", os: "linux", cpu: "arm64", libc: "musl" },
-  { target: "x86_64-unknown-linux-musl", os: "linux", cpu: "x64", libc: "musl" },
-  { target: "x86_64-pc-windows-msvc", os: "win32", cpu: "x64" },
-].map((p) => ({
-  ...p,
-  package: `@issen/cli-${p.os}-${p.cpu}${p.libc === "musl" ? "-musl" : ""}`,
-  binary: p.os === "win32" ? "issen.exe" : "issen",
-}));
+const PLATFORMS = require("./platforms.js");
 
 // The host C library on Linux. Reading ldd is a file read; the process report
 // is the fallback because generating it costs more than the launch it serves.
@@ -29,8 +14,7 @@ function hostLibc() {
   } catch {
     // No ldd script to read; ask the runtime instead.
   }
-  const header = process.report && process.report.getReport().header;
-  return header && header.glibcVersionRuntime ? "glibc" : "musl";
+  return process.report.getReport().header.glibcVersionRuntime ? "glibc" : "musl";
 }
 
 /**
@@ -45,9 +29,12 @@ function hostLibc() {
 function binaryPath() {
   if (process.env.ISSEN_BINARY) return process.env.ISSEN_BINARY;
   const libc = hostLibc();
-  const candidates = PLATFORMS.filter(
-    (p) => p.os === process.platform && p.cpu === process.arch && (libc !== "musl" || p.libc === "musl"),
-  ).sort((a, b) => (b.libc === libc) - (a.libc === libc));
+  const candidates = (libc === "glibc" ? ["glibc", "musl"] : [libc]).flatMap((l) =>
+    PLATFORMS.filter((p) => p.os === process.platform && p.cpu === process.arch && p.libc === l),
+  );
+  if (candidates.length === 0) {
+    throw new Error(`issen: no prebuilt binary for ${process.platform}-${process.arch}${libc ? ` (${libc})` : ""}.`);
+  }
   for (const p of candidates) {
     try {
       return require.resolve(`${p.package}/${p.binary}`);
@@ -55,12 +42,9 @@ function binaryPath() {
       // Not installed; try the next variant.
     }
   }
-  if (candidates.length === 0) {
-    throw new Error(`issen: no prebuilt binary for ${process.platform}-${process.arch}${libc ? ` (${libc})` : ""}.`);
-  }
   throw new Error(
     `issen: ${candidates[0].package} is not installed. It is an optional dependency; reinstall without --omit=optional or --no-optional.`,
   );
 }
 
-module.exports = { binaryPath, PLATFORMS };
+module.exports = { binaryPath };

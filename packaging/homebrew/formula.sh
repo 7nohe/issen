@@ -4,8 +4,9 @@
 #   packaging/homebrew/formula.sh <version> <SHA256SUMS> [base URL]
 #
 # The base URL defaults to the release's download location on GitHub. The
-# formula installs the prebuilt archives the release workflow smoke-tested;
-# Linux takes the glibc build, which Homebrew on Linux always satisfies.
+# formula installs the prebuilt archives the release workflow smoke-tested.
+# Linux takes the static musl build: the glibc build needs glibc 2.34, and
+# Homebrew leaves a prebuilt binary on the host's own glibc, which may be older.
 set -euo pipefail
 
 if [ $# -lt 2 ]; then
@@ -18,8 +19,7 @@ base="${3:-https://github.com/7nohe/issen/releases/download/v$version}"
 
 sha() {
   local file="issen-v$version-$1.tar.gz"
-  # sha256sum marks binary-mode lines with "*" before the name.
-  awk -v f="$file" '{ name = $2; sub(/^\*/, "", name) } name == f { print $1; found = 1 } END { exit !found }' "$sums" ||
+  awk -v f="$file" '$2 == f { print $1; found = 1 } END { exit !found }' "$sums" ||
     { echo "no checksum for $file in $sums" >&2; return 1; }
 }
 
@@ -28,8 +28,8 @@ sha() {
 # checksums and exit 0.
 mac_arm=$(sha aarch64-apple-darwin)
 mac_intel=$(sha x86_64-apple-darwin)
-linux_arm=$(sha aarch64-unknown-linux-gnu)
-linux_intel=$(sha x86_64-unknown-linux-gnu)
+linux_arm=$(sha aarch64-unknown-linux-musl)
+linux_intel=$(sha x86_64-unknown-linux-musl)
 
 cat <<RUBY
 class Issen < Formula
@@ -40,22 +40,22 @@ class Issen < Formula
   on_macos do
     on_arm do
       url "$base/issen-v$version-aarch64-apple-darwin.tar.gz"
-      sha256 "$(sha aarch64-apple-darwin)"
+      sha256 "$mac_arm"
     end
     on_intel do
       url "$base/issen-v$version-x86_64-apple-darwin.tar.gz"
-      sha256 "$(sha x86_64-apple-darwin)"
+      sha256 "$mac_intel"
     end
   end
 
   on_linux do
     on_arm do
-      url "$base/issen-v$version-aarch64-unknown-linux-gnu.tar.gz"
-      sha256 "$(sha aarch64-unknown-linux-gnu)"
+      url "$base/issen-v$version-aarch64-unknown-linux-musl.tar.gz"
+      sha256 "$linux_arm"
     end
     on_intel do
-      url "$base/issen-v$version-x86_64-unknown-linux-gnu.tar.gz"
-      sha256 "$(sha x86_64-unknown-linux-gnu)"
+      url "$base/issen-v$version-x86_64-unknown-linux-musl.tar.gz"
+      sha256 "$linux_intel"
     end
   end
 
