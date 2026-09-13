@@ -1,0 +1,23 @@
+THIRD-PARTY LICENSES
+
+An issen binary is built from the Rust crates below. Each license text is
+reproduced as the crates publish it, followed by the crates it covers.
+Material issen reproduces from outside Rust, the IPADIC dictionary and the
+textlint rules, is covered in NOTICE.
+
+{{#each overview}}
+- {{{name}}}: {{count}} crate(s)
+{{/each}}
+{{#each licenses}}
+
+===========================================================================
+{{{name}}}
+===========================================================================
+
+Used by:
+{{#each used_by}}
+  {{crate.name}} {{crate.version}}
+{{/each}}
+
+{{{text}}}
+{{/each}}
