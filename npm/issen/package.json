@@ -27,6 +27,7 @@
     "bin/issen",
     "index.js",
     "index.d.ts",
+    "platforms.js",
     "LICENSE",
     "NOTICE",
     "README.md"
