@@ -10,6 +10,9 @@ not only of the source: every binary built with the default
 `backend-lindera` feature embeds the IPADIC dictionary through the
 lindera-ipadic crate, and every build carries the textlint rule material.
 
+The licenses of the Rust crates compiled into a binary are in
+THIRD-PARTY-LICENSES, which the release archives carry alongside this file.
+
 ===========================================================================
 textlint-rule-preset-ja-technical-writing and its rules
 ===========================================================================

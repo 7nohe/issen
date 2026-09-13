@@ -47,8 +47,10 @@ First release.
 
 - Prebuilt archives for Linux (x86_64 and aarch64, each linked against glibc
   and statically against musl), macOS (Apple silicon and Intel), and Windows
-  (x86_64). Each carries the binary, `LICENSE`, and `NOTICE`, whose IPADIC
-  notice has to travel with any redistributed binary.
+  (x86_64). Each carries the binary, `LICENSE`, `NOTICE` for the IPADIC
+  dictionary and the textlint rules, and `THIRD-PARTY-LICENSES` for the Rust
+  crates compiled in. Both notice files have to travel with any redistributed
+  binary.
 - On Linux, prefer the glibc archive. The musl one is for systems without a
   recent glibc; it is slower on large batches of files.
 - Building from source needs Rust 1.88 or later.

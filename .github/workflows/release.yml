@@ -33,9 +33,25 @@ jobs:
             exit 1
           fi
 
+  # One file for every target: about.toml lists them all, so the crates any
+  # archive carries are covered.
+  licenses:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@0.9.2
+      - run: cargo about generate --locked --fail about.hbs -o THIRD-PARTY-LICENSES
+      - uses: actions/upload-artifact@v7
+        with:
+          name: third-party-licenses
+          path: THIRD-PARTY-LICENSES
+          if-no-files-found: error
+
   build:
     name: build (${{ matrix.target }})
-    needs: version
+    needs: [version, licenses]
     # Runs when the version check passed, or was skipped on a manual run.
     if: ${{ !failure() && !cancelled() }}
     runs-on: ${{ matrix.os }}
@@ -79,13 +95,17 @@ jobs:
         if: contains(matrix.target, 'linux-gnu')
         run: objdump -T "target/${{ matrix.target }}/release/issen" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -n 1
 
+      - uses: actions/download-artifact@v8
+        with:
+          name: third-party-licenses
+
       - name: Package
         run: |
           label="${{ github.ref_type == 'tag' && github.ref_name || 'dev' }}"
           name="issen-$label-${{ matrix.target }}"
           mkdir "$name"
-          # NOTICE carries the IPADIC notice, which has to travel with the binary.
-          cp "target/${{ matrix.target }}/release/issen${{ matrix.exe }}" LICENSE NOTICE README.md CHANGELOG.md "$name/"
+          # NOTICE and THIRD-PARTY-LICENSES have to travel with the binary.
+          cp "target/${{ matrix.target }}/release/issen${{ matrix.exe }}" LICENSE NOTICE THIRD-PARTY-LICENSES README.md CHANGELOG.md "$name/"
           if [ -n "${{ matrix.exe }}" ]; then
             archive="$name.zip"
             7z a -tzip "$archive" "$name" >/dev/null

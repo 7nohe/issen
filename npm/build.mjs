@@ -47,7 +47,7 @@ for (const p of PLATFORMS) {
   else execFileSync("tar", ["-xzf", archive, "-C", unpacked]);
 
   const dir = join(values.out, p.package.split("/")[1]);
-  const files = [p.binary, "LICENSE", "NOTICE"];
+  const files = [p.binary, "LICENSE", "NOTICE", "THIRD-PARTY-LICENSES"];
   mkdirSync(dir);
   for (const file of files) cpSync(join(unpacked, stem, file), join(dir, file));
   if (!zip) chmodSync(join(dir, p.binary), 0o755);

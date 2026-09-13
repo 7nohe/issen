@@ -61,6 +61,8 @@ class Issen < Formula
 
   def install
     bin.install "issen"
+    # LICENSE and NOTICE are installed by name; this one has to be asked for.
+    prefix.install "THIRD-PARTY-LICENSES"
   end
 
   test do
