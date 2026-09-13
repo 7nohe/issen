@@ -1,0 +1,4 @@
+# The compat fixtures are paired with the byte offsets textlint reported for
+# them, so they have to reach every checkout as the exact bytes textlint was
+# run over. A CRLF checkout adds one byte per line and shifts every offset.
+tests/fixtures/*.md -text

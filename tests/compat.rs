@@ -35,6 +35,11 @@ fn check_fixture(name: &str) {
     // binary was built at, which goes stale when the checkout moves.
     let dir = format!("{}/tests/fixtures/", std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let source = std::fs::read_to_string(format!("{dir}{name}.md")).unwrap();
+    // The paired JSON holds the offsets textlint reported for these exact bytes,
+    // and a CRLF checkout shifts every one of them by the line count.
+    // .gitattributes pins the fixtures to LF; a failure here means that pin was
+    // lost, not that a rule regressed.
+    assert!(!source.contains('\r'), "{name}.md has CRLF line endings -- see .gitattributes");
     let mut expected = textlint_expectations(&format!("{dir}{name}.textlint.json"));
     for (rule, tl_index, issen_index) in INDEX_DIVERGENCES {
         for e in expected.iter_mut() {
