@@ -16,7 +16,8 @@ First release.
 - 17 rules ported from `textlint-rule-preset-ja-technical-writing` 12.0.2, with
   the preset's thresholds as defaults. Over 950 Japanese documents issen
   reproduces 97.9% of what textlint reports on these rules; the measurement and
-  every known difference are in [COMPATIBILITY.md](COMPATIBILITY.md).
+  every known difference are in
+  [COMPATIBILITY.md](https://github.com/7nohe/issen/blob/main/COMPATIBILITY.md).
 - Three document validators, inactive until configured: `required-headings`,
   `forbidden` (literal or `/regex/flags`), and `terminology`.
 - Morphological analysis by Lindera 6.0.0 with IPADIC compiled into the binary.
