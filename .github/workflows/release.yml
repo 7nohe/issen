@@ -1,0 +1,144 @@
+name: Release
+
+# A tag push builds every target and opens a draft release; publishing it is a
+# manual step. Running the workflow by hand builds and uploads the same archives
+# without touching releases, to check the matrix before tagging.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  version:
+    name: tag matches Cargo.toml and CHANGELOG.md
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match Cargo.toml version $version"
+            exit 1
+          fi
+          # The release notes come from this section, and it must carry a date.
+          if ! grep -q "^## \[$version\] - " CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no dated section for $version"
+            exit 1
+          fi
+
+  build:
+    name: build (${{ matrix.target }})
+    needs: version
+    # Runs when the version check passed, or was skipped on a manual run.
+    if: ${{ !failure() && !cancelled() }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Linux ships twice. The glibc build is the fast one: over a 950-file
+        # corpus the musl build took about 21% longer, its allocator being the
+        # difference. The musl build is static and runs where glibc is absent or
+        # too old. The glibc builds use the oldest available runner to keep the
+        # required glibc version low.
+        include:
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04 }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm }
+          - { target: x86_64-unknown-linux-musl, os: ubuntu-latest, musl: true }
+          - { target: aarch64-unknown-linux-musl, os: ubuntu-24.04-arm, musl: true }
+          - { target: aarch64-apple-darwin, os: macos-latest }
+          - { target: x86_64-apple-darwin, os: macos-15-intel }
+          - { target: x86_64-pc-windows-msvc, os: windows-latest, exe: .exe }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - if: matrix.musl
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - run: cargo build --release --locked --target ${{ matrix.target }}
+
+      # Every target builds on a runner that can execute it, so every archive
+      # has been run once: it starts, loads its dictionary, and lints.
+      - name: Smoke test
+        run: |
+          bin="target/${{ matrix.target }}/release/issen${{ matrix.exe }}"
+          "$bin" --version
+          "$bin" README.ja.md COMPATIBILITY.ja.md
+
+      - name: Required glibc version
+        if: contains(matrix.target, 'linux-gnu')
+        run: objdump -T "target/${{ matrix.target }}/release/issen" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -n 1
+
+      - name: Package
+        run: |
+          label="${{ github.ref_type == 'tag' && github.ref_name || 'dev' }}"
+          name="issen-$label-${{ matrix.target }}"
+          mkdir "$name"
+          # NOTICE carries the IPADIC notice, which has to travel with the binary.
+          cp "target/${{ matrix.target }}/release/issen${{ matrix.exe }}" LICENSE NOTICE README.md CHANGELOG.md "$name/"
+          if [ -n "${{ matrix.exe }}" ]; then
+            archive="$name.zip"
+            7z a -tzip "$archive" "$name" >/dev/null
+          else
+            archive="$name.tar.gz"
+            tar -czf "$archive" "$name"
+          fi
+          if command -v sha256sum >/dev/null; then
+            sha256sum "$archive" > "$archive.sha256"
+          else
+            shasum -a 256 "$archive" > "$archive.sha256"
+          fi
+          cat "$archive.sha256"
+          echo "ARCHIVE=$archive" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: issen-${{ matrix.target }}
+          path: |
+            ${{ env.ARCHIVE }}
+            ${{ env.ARCHIVE }}.sha256
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: issen-*
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: |
+          cat ./*.sha256 > SHA256SUMS
+          rm ./*.sha256
+          cat SHA256SUMS
+      - name: Release notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" { on = 1; next }
+            on && /^## \[/ { exit }
+            on && /^\[[^]]+\]: / { exit }
+            on { print }
+          ' CHANGELOG.md | sed -e '/./,$!d' > notes.md
+          test -s notes.md
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --draft --title "issen $GITHUB_REF_NAME" --notes-file notes.md

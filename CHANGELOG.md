@@ -42,9 +42,15 @@ First release.
 - `gate.fail-on` and `gate.max-warnings` decide the exit code. Unknown rule
   names and gate values are rejected rather than ignored.
 
-### Requirements
+### Distribution
 
-- Rust 1.88 or later to build from source.
+- Prebuilt archives for Linux (x86_64 and aarch64, each linked against glibc
+  and statically against musl), macOS (Apple silicon and Intel), and Windows
+  (x86_64). Each carries the binary, `LICENSE`, and `NOTICE`, whose IPADIC
+  notice has to travel with any redistributed binary.
+- On Linux, prefer the glibc archive. The musl one is for systems without a
+  recent glibc; it is slower on large batches of files.
+- Building from source needs Rust 1.88 or later.
 
 [Unreleased]: https://github.com/7nohe/issen/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/7nohe/issen/releases/tag/v0.1.0
