@@ -228,12 +228,19 @@ impl Rule for NoDoubledConjunction {
     }
     fn check(&mut self, blk: &BlockData, _ctx: &Ctx) -> Vec<Report> {
         // textlint skips a conjunction right after a whitespace token; Lindera
-        // emits no whitespace tokens, so look at the character instead.
-        let after_space = |t: &Token| blk.text()[..t.byte_start].chars().next_back().map(char::is_whitespace).unwrap_or(false);
+        // emits no whitespace tokens, so look at the character instead. It
+        // tokenizes one sentence at a time, so the lookback stops at the sentence
+        // start: the line break before a sentence belongs to no sentence at all.
         let per_sentence: Vec<Vec<&Token>> = blk
             .sentences
             .iter()
-            .map(|s| blk.sentence_tokens(s).iter().filter(|t| t.pos() == "接続詞" && !after_space(t)).collect())
+            .map(|s| {
+                let start = s.byte_range.start;
+                let after_space = |t: &Token| {
+                    t.byte_start > start && blk.text()[start..t.byte_start].chars().next_back().map(char::is_whitespace).unwrap_or(false)
+                };
+                blk.sentence_tokens(s).iter().filter(|t| t.pos() == "接続詞" && !after_space(t)).collect()
+            })
             .collect();
 
         let mut out = Vec::new();

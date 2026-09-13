@@ -92,6 +92,49 @@ fn conjunction_after_whitespace_is_ignored() {
     // whitespace tokens, so the rule must look at the text instead.
     assert!(!has("速いので `Cargo.toml` で固定する。上げるときは `cargo test` で確認する。\n", "no-doubled-conjunction"));
     assert!(has("しかし、遅い。しかし、安い。\n", "no-doubled-conjunction"));
+    // The lookback stops at the sentence start: textlint tokenizes one sentence
+    // at a time, so the line break before a sentence is not a whitespace token.
+    assert!(has("しかし、遅い。\nしかし、安い。\n", "no-doubled-conjunction"));
+}
+
+/// Found by diffing against textlint over a corpus of Japanese documentation.
+/// Each case is a divergence that measurement turned up and the fix closed.
+mod corpus {
+    use super::*;
+
+    #[test]
+    fn a_soft_break_does_not_split_the_text_node() {
+        // In markdown a soft break stays inside one text node, so the "does this
+        // end in Japanese prose at all" test sees the whole paragraph. issen's
+        // segments are finer, and used to go quiet on every shortcode close.
+        assert!(has("日本語の本文です。\n{{< /note >}}\n", "ja-no-mixed-period"));
+        // Still silent when the text node itself carries no Japanese.
+        assert!(!has("plain english text\n", "ja-no-mixed-period"));
+    }
+
+    #[test]
+    fn a_paragraph_that_ends_in_emphasis_is_not_checked_for_period() {
+        // textlint checks a paragraph only when its last child is a text node.
+        assert!(!has("**2024年8月**\n", "ja-no-mixed-period"));
+        assert!(!has("*2024年8月*\n", "ja-no-mixed-period"));
+        assert!(has("2024年8月\n", "ja-no-mixed-period"));
+    }
+
+    #[test]
+    fn strong_is_not_an_emphasis_exclusion() {
+        // Only Emphasis is on the ignore list of the character rules; Strong is
+        // a separate node type and stays checked.
+        assert!(has("これは **すごい!** です。\n", "no-exclamation-question-mark"));
+        assert!(!has("これは *すごい!* です。\n", "no-exclamation-question-mark"));
+    }
+
+    #[test]
+    fn a_clause_ending_in_a_bracket_before_the_period_counts() {
+        // The analyser merges ")。" into one unknown token, so testing every
+        // character of the following token for a terminator found none.
+        let src = "本文である。\n\n- タグを省略する(ポリシーをAlwaysに設定します)。\n";
+        assert!(has(src, "no-mix-dearu-desumasu"));
+    }
 }
 
 /// textlint runs on JavaScript strings, so every position and length it

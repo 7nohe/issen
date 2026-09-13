@@ -5,7 +5,6 @@
 use super::{Anchor, BlockData, Ctx, Report, Rule, Scope};
 use crate::config::{opt_bool, opt_str};
 use crate::document::BlockKind;
-use crate::sentence::is_terminator;
 use crate::tokenizer::Token;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -50,14 +49,17 @@ struct Hit {
 fn next_puncture(tokens: &[Token], idx: usize) -> Option<usize> {
     (idx + 1..tokens.len()).find(|&i| {
         let t = &tokens[i];
-        t.surface == "、" || t.surface == "。" || t.conjugated_type().contains("特殊") || t.pos() == "名詞"
+        t.surface.contains(['、', '。']) || t.conjugated_type().contains("特殊") || t.pos() == "名詞"
     })
 }
 
 fn is_last_token(tokens: &[Token], idx: usize) -> bool {
     match next_puncture(tokens, idx) {
         None => true,
-        Some(p) => tokens[p].surface.chars().all(is_terminator),
+        // textlint tests the surface for any of these. Testing every character
+        // instead would miss a clause end whenever the analyser merges a bracket
+        // and a 句点 into one unknown token, as it does for ")。".
+        Some(p) => tokens[p].surface.chars().any(|c| matches!(c, '!' | '?' | '！' | '？' | '。')),
     }
 }
 

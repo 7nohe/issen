@@ -48,7 +48,11 @@ pub struct Segment {
     /// Inside `[...](url)`; `url_link` when the link text is its own URL.
     pub in_link: bool,
     pub url_link: bool,
+    /// Inside `*em*`. Kept apart from `in_strong` because textlint's rules
+    /// exclude the two node types separately.
     pub in_emphasis: bool,
+    /// Inside `**strong**`.
+    pub in_strong: bool,
 }
 
 impl Segment {
@@ -83,6 +87,7 @@ impl Block {
             in_link: inline.link > 0,
             url_link: inline.url_link,
             in_emphasis: inline.emphasis > 0,
+            in_strong: inline.strong > 0,
         });
     }
 
@@ -178,6 +183,27 @@ impl Block {
     pub fn last_content_segment(&self) -> Option<&Segment> {
         self.segments.iter().rev().find(|s| !self.text[s.text_start..s.text_end].trim().is_empty())
     }
+
+    /// The block text of the markdown text node the last content segment belongs
+    /// to. A soft break does not start a new text node, so issen's segments are
+    /// finer than the nodes textlint rules see; this walks back over breaks and
+    /// adjacent text in the same inline context to recover the node.
+    pub fn last_text_node(&self) -> Option<&str> {
+        let end = self.segments.iter().rposition(|s| !self.text[s.text_start..s.text_end].trim().is_empty())?;
+        let last = &self.segments[end];
+        let same = |s: &Segment| {
+            s.kind != SegmentKind::Code
+                && s.in_link == last.in_link
+                && s.url_link == last.url_link
+                && s.in_emphasis == last.in_emphasis
+                && s.in_strong == last.in_strong
+        };
+        let mut start = end;
+        while start > 0 && same(&self.segments[start - 1]) {
+            start -= 1;
+        }
+        Some(&self.text[self.segments[start].text_start..last.text_end])
+    }
 }
 
 #[derive(Default)]
@@ -185,6 +211,7 @@ struct Inline {
     link: usize,
     url_link: bool,
     emphasis: usize,
+    strong: usize,
     image: usize,
 }
 
@@ -243,6 +270,7 @@ impl Document {
                     Tag::MetadataBlock(_) => in_metadata = true,
                     Tag::Image { .. } => inline.image += 1,
                     Tag::Emphasis => inline.emphasis += 1,
+                    Tag::Strong => inline.strong += 1,
                     Tag::Link { dest_url, .. } => {
                         inline.link += 1;
                         link_url = Some(dest_url.to_string());
@@ -275,6 +303,7 @@ impl Document {
                     TagEnd::MetadataBlock(_) => in_metadata = false,
                     TagEnd::Image => inline.image = inline.image.saturating_sub(1),
                     TagEnd::Emphasis => inline.emphasis = inline.emphasis.saturating_sub(1),
+                    TagEnd::Strong => inline.strong = inline.strong.saturating_sub(1),
                     TagEnd::Link => {
                         inline.link = inline.link.saturating_sub(1);
                         inline.url_link = false;

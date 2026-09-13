@@ -297,7 +297,9 @@ impl Rule for JaNoMixedPeriod {
     }
     fn check(&mut self, blk: &BlockData, ctx: &Ctx) -> Vec<Report> {
         let Some(last) = blk.block.last_content_segment() else { return Vec::new() };
-        if last.kind != SegmentKind::Text || last.in_link {
+        // textlint only checks a paragraph whose last child is a plain text node,
+        // so inline code, a link and emphasis all end the check.
+        if last.kind != SegmentKind::Text || last.in_link || last.in_emphasis || last.in_strong {
             return Vec::new();
         }
         let prefer = opt_str(&ctx.options, "periodMark", "。");
@@ -305,7 +307,9 @@ impl Rule for JaNoMixedPeriod {
         allowed.push(prefer.clone());
 
         let text = blk.text()[last.text_start..last.text_end].trim_end();
-        if text.is_empty() || !is_japanese(text) {
+        // The "is this Japanese at all" test runs over the whole text node, which
+        // is wider than this segment whenever a soft break splits one.
+        if text.is_empty() || !blk.block.last_text_node().map(is_japanese).unwrap_or(false) {
             return Vec::new();
         }
         let (rel, ch) = text.char_indices().last().unwrap();
